@@ -1,5 +1,5 @@
 #'rrGDM' function
-#' @description Fit a reduced-ranked Generalised Dissimilarity Model using TMB
+#' @description Fit a reduced-rank Generalised Dissimilarity Model using TMB
 #' @param Y A matrix or data frame containing the response variable (usually species abundance matrix).
 #' @param X A data frame containing the predictor variables.
 #' @param k An integer specifying the number of latent variables to be used in the model. Default is 2.
@@ -60,23 +60,25 @@ rrGDM <- function(Y,
                     "gaussian" = 0,
                     "binomial" = 1,
                     "beta" = 2,
-                    cli::cli_abort("Unsupported family"))
+                    cli::cli_abort("Family not supported"))
 
-  if (!is.null(link)) {
-    link_idx <- switch(link,
-                       "identity" = 0,
-                       "negexp" = 1,
-                       "neggaus" = 2,
-                       cli::cli_abort("Unsupported link"))
-  } else {
-    link_idx <- switch(family,
-                       "gaussian" = 0,
-                       "binomial" = 1,
-                       "beta" = 1)
+  if (is.null(link)) {
+    link <- switch(family,
+                       "gaussian" = 'identity',
+                       "binomial" = 'negexp',
+                       "beta" = 'negexp')
   }
 
+  link_idx <- switch(link,
+                    "identity" = 0,
+                    "negexp" = 1,
+                    "neggaus" = 2,
+                     cli::cli_abort("Link not supported"))
+
+
+
   # Prep. diss data
-  Y_df <- make_y_diss(Y, trans = trans, binary = binary, num_den = (family == 'binomial'))
+  Y_df <- make_Y_diss(Y, trans = trans, binary = binary, num_den = (family == 'binomial'))
   D_mat <- Y_df[, c(1,2)]                                                              # Design (row col pairs)
   Y_val <- Y_df[,3]
   Y_val <- scale_dist(Y_val, sort(scale_diss))                                         # scale between set interval, if defined
@@ -221,7 +223,7 @@ rrGDM <- function(Y,
     formula_sd = formula_sd,
     call = match.call())
 
-  class(result) <- "rrGDM"
+  class(res) <- "rrGDM"
   return(res)
 }
 
