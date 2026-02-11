@@ -8,17 +8,17 @@ rrGDM(
   Y,
   X = NULL,
   k = 2,
-  trans = function(x) x,
   binary = FALSE,
   formula = ~.,
   formula_sd = ~1,
   dist_method = "bray",
   scale_diss = NULL,
-  family = "beta",
+  family = "gaussian",
   link = NULL,
   se = TRUE,
   sample_error = TRUE,
   constraint = 1,
+  trans = function(x) x,
   seed = NULL,
   init_jitter = 0.01,
   trace = FALSE,
@@ -32,30 +32,36 @@ rrGDM(
 
 \item{k}{An integer specifying the number of latent variables to be used in the model. Default is 2.}
 
-\item{trans}{A function to transform the response matrix (e.g., log, sqrt). Default is no transformation.}
+\item{binary}{Logical indicating whether the response variable should be treated as binary (e.g., presence-absence). Default is FALSE.}
 
-\item{binary}{A logical indicating whether the response variable is binary (TRUE) or continuous (FALSE). Default is FALSE.}
+\item{formula}{Formula specifying the model to be fitted.}
 
-\item{formula}{A formula specifying the model to be fitted.}
-
-\item{formula_sd}{A formula specifying the model for the dispersion parameter. Default is ~1 (intercept only).}
+\item{formula_sd}{Formula specifying the model for the dispersion parameter. Default is ~1 (intercept only).}
 
 \item{dist_method}{A character string specifying the distance method to be used (e.g., "euclidean", "bray"). Default is "bray".}
 
-\item{scale_diss}{A vector with two values indicating a new scale for dissimilarities. Useful for distributions bounded between 0 and 1 (e.g., beta family)}
+\item{scale_diss}{A numeric vector of length two indicating a new scale for dissimilarities. Useful for distributions bounded between 0 and 1 (e.g., beta family)}
 
-\item{family}{A character string specifying the family of the response variable (e.g., "beta", "binomial"). Default is "beta".}
+\item{family}{A character string specifying the family of the response variable (e.g., "beta", "binomial"). Default is "gaussian".}
 
-\item{link}{A character string specifying the link function to be used (e.g., "negexp"). Default is "negexp".}
+\item{link}{Character string specifying the link function to be used (e.g., "negexp"). Default is 'identity' for Gaussian distribution, and 'negexp' for beta and binomial distributions.}
 
-\item{se}{A logical indicating whether to calculate standard errors (TRUE) or not (FALSE). Default is TRUE.}
+\item{se}{Logical indicating whether to calculate standard errors (TRUE) or not (FALSE). Default is TRUE.}
+
+\item{sample_error}{Logical. If TRUE, includes site-level random effects to account for variation not explained by predictors.}
+
+\item{constraint}{Integer. Specifies identifiability constraints. 1: Constraint applied to environmental loadings matrix ($\lambda$); 2: Constraint applied to site random effects matrix (U). Default is 1.}
+
+\item{trans}{Function used to transform the response matrix before computing dissimilarities (e.g., log, sqrt). Default is no transformation.}
 
 \item{seed}{An integer specifying the seed for random number generation. Default is NULL.}
 
-\item{control}{a list of control parameters passed to stats::nlminb}
+\item{init_jitter}{Numeric. A small standard deviation used to jitter initial parameter values.}
+
+\item{control}{A list of control parameters passed to stats::nlminb}
 }
 \value{
-A list containing the fitted model object, the optimized parameters, and other relevant information.
+An object of class 'rrGDM' containing the fitted model object, the optimized parameters, and other relevant information.
 }
 \description{
 Fit a reduced-ranked Generalised Dissimilarity Model using TMB

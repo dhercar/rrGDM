@@ -20,12 +20,12 @@ Type objective_function<Type>::operator() ()
   DATA_INTEGER(n_lv);           // n latent dimensions
 
   // Parameters
-  PARAMETER_VECTOR(beta_diag);          // Beta diagonal(env. loadings)
-  PARAMETER_VECTOR(beta_upper);         // Beta, upper triangle
-  PARAMETER_VECTOR(beta_lower);         // Beta, lower triangle
+  PARAMETER_VECTOR(lambda_diag);          // lambda diagonal(env. loadings)
+  PARAMETER_VECTOR(lambda_upper);         // lambda, upper triangle
+  PARAMETER_VECTOR(lambda_lower);         // lambda, lower triangle
   PARAMETER_MATRIX(u_sample);           // U (sample error)
   PARAMETER(log_scale);                 // Scale parameter
-  PARAMETER_VECTOR(lambda);             // effects on sigma
+  PARAMETER_VECTOR(beta);             // effects on sigma
   PARAMETER_MATRIX(u);                  // additional random effects ()intercepts)
   PARAMETER_VECTOR(log_sigma_re);       // log of SD for each RE term
 
@@ -41,17 +41,17 @@ Type objective_function<Type>::operator() ()
 
   // ---------- 2. LOADINGS AND CONSTRAINS ---------
 
-  // CONSTRUCT BETA MATRIX (environmental loadings)
-  matrix<Type> Beta(n_env, n_lv);
-  Beta.setZero();
+  // CONSTRUCT LAMBDA MATRIX (environmental loadings)
+  matrix<Type> lambda(n_env, n_lv);
+  lambda.setZero();
 
   // Diagonal
-  int dim_beta = (n_env < n_lv) ? n_env : n_lv;
-  for(int i = 0; i < dim_beta; i++){
+  int dim_lambda = (n_env < n_lv) ? n_env : n_lv;
+  for(int i = 0; i < dim_lambda; i++){
     if(constraint == 1){
-      Beta(i, i) = exp(beta_diag(i));
+      lambda(i, i) = exp(lambda_diag(i));
     } else {
-      Beta(i, i) = beta_diag(i);
+      lambda(i, i) = lambda_diag(i);
     }
   }
 
@@ -60,7 +60,7 @@ Type objective_function<Type>::operator() ()
   for(int i = 0; i < n_env; i++){
     for(int j = 0; j < n_lv; j++){
       if(i > j){
-        Beta(i, j) = beta_lower(idx++);
+        lambda(i, j) = lambda_lower(idx++);
       }
     }
   }
@@ -71,7 +71,7 @@ Type objective_function<Type>::operator() ()
     for(int i = 0; i < n_env; i++){
       for(int j = 0; j < n_lv; j++){
         if(i < j){
-          Beta(i, j) = beta_upper(idx++);
+          lambda(i, j) = lambda_upper(idx++);
         }
       }
     }
@@ -79,14 +79,14 @@ Type objective_function<Type>::operator() ()
 
 
   // ---------- 3. LATENT (COM)POSITIONS ---------
-  matrix<Type> L_m = X * Beta;         // expected position
+  matrix<Type> L_m = X * lambda;         // expected position
   matrix<Type> L = L_m + u_sample;     // sample-level error
   if (has_random && u.size() > 0) {    // additional random effects
     L += Z * u;
   }
 
   // SD sample-level error (distributional model)
-  vector<Type> l_sample_sd = W * lambda.matrix();
+  vector<Type> l_sample_sd = W * beta.matrix();
 
   // initiate negative log-likelihood
   Type nll = 0.0;
@@ -167,16 +167,16 @@ Type objective_function<Type>::operator() ()
   }
 
   // Report intermediate variables
-  REPORT(Beta);                            // environmental loadings
-  REPORT(lambda);                          // Effects on dispersion (SD of sample-level error)
-  REPORT(sigma_re);                        // SD of other random effects
-  REPORT(L);                               // Site loadings (conditional) for plot
-  REPORT(L_m);                             // Site loadings (marginal) for plot
-  if (has_sample_re) REPORT(u_sample);     // U: Sample-level error loadings
+  REPORT(lambda);                            // environmental loadings
+  REPORT(beta);                              // Effects on dispersion (SD of sample-level error)
+  REPORT(sigma_re);                          // SD of other random effects
+  REPORT(L);                                 // Site loadings (conditional) for plot
+  REPORT(L_m);                               // Site loadings (marginal) for plot
+  if (has_sample_re) REPORT(u_sample);       // U: Sample-level error loadings
 
   // report SE
-  ADREPORT(Beta);                          // B: Env. loadings
-  ADREPORT(lambda);                        // Effects on dispersion (SD sample error)
+  ADREPORT(lambda);                        // B: Env. loadings
+  ADREPORT(beta);                          // Effects on dispersion (SD sample error)
   ADREPORT(sigma_re);                      // SD of other random effects
 
   if (family == 0) ADREPORT(SD);

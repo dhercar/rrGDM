@@ -3,36 +3,38 @@
 #' @param Y A matrix or data frame containing the response variable (usually species abundance matrix).
 #' @param X A data frame containing the predictor variables.
 #' @param k An integer specifying the number of latent variables to be used in the model. Default is 2.
-#' @param formula A formula specifying the model to be fitted.
-#' @param formula_sd A formula specifying the model for the dispersion parameter. Default is ~1 (intercept only).
+#' @param formula Formula specifying the model to be fitted.
+#' @param formula_sd Formula specifying the model for the dispersion parameter. Default is ~1 (intercept only).
+#' @param constraint Integer. Specifies identifiability constraints. 1: Constraint applied to environmental loadings matrix ($\lambda$); 2: Constraint applied to site random effects matrix (U). Default is 1.
 #' @param dist_method A character string specifying the distance method to be used (e.g., "euclidean", "bray"). Default is "bray".
-#' @param trans A function to transform the response matrix (e.g., log, sqrt). Default is no transformation.
-#' @param binary A logical indicating whether the response variable is binary (TRUE) or continuous (FALSE). Default is FALSE.
-#' @param scale_diss A vector with two values indicating a new scale for dissimilarities. Useful for distributions bounded between 0 and 1 (e.g., beta family)
-#' @param family A character string specifying the family of the response variable (e.g., "beta", "binomial"). Default is "beta".
-#' @param link A character string specifying the link function to be used (e.g., "negexp"). Default is "negexp".
-#' @param se A logical indicating whether to calculate standard errors (TRUE) or not (FALSE). Default is TRUE.
+#' @param trans Function used to transform the response matrix before computing dissimilarities (e.g., log, sqrt). Default is no transformation.
+#' @param binary Logical indicating whether the response variable should be treated as binary (e.g., presence-absence). Default is FALSE.
+#' @param scale_diss A numeric vector of length two indicating a new scale for dissimilarities. Useful for distributions bounded between 0 and 1 (e.g., beta family)
+#' @param family A character string specifying the family of the response variable (e.g., "beta", "binomial"). Default is "gaussian".
+#' @param link Character string specifying the link function to be used (e.g., "negexp"). Default is 'identity' for Gaussian distribution, and 'negexp' for beta and binomial distributions.
+#' @param se Logical indicating whether to calculate standard errors (TRUE) or not (FALSE). Default is TRUE.
+#' @param sample_error Logical. If TRUE, includes site-level random effects to account for variation not explained by predictors.
 #' @param seed An integer specifying the seed for random number generation. Default is NULL.
-#' @param control a list of control parameters passed to stats::nlminb
-#' @return A list containing the fitted model object, the optimized parameters, and other relevant information.
-#' @importFrom TMB MakeADFun
-#' @importFrom TMB sdreport
+#' @param init_jitter Numeric. A small standard deviation used to jitter initial parameter values.
+#' @param control A list of control parameters passed to stats::nlminb
+#' @return An object of class 'rrGDM' containing the fitted model object, the optimized parameters, and other relevant information.
+#' @importFrom TMB MakeADFun sdreport
 #' @importFrom stats nlminb
 #' @export
 rrGDM <- function(Y,
                   X = NULL,
                   k = 2,
-                  trans = function(x) x,
                   binary = FALSE,
                   formula = ~.,
                   formula_sd = ~ 1,
                   dist_method = 'bray',
                   scale_diss = NULL,
-                  family = 'beta',
+                  family = 'gaussian',
                   link = NULL,
                   se = TRUE,
                   sample_error = TRUE,
                   constraint = 1,
+                  trans = function(x) x,
                   seed = NULL,
                   init_jitter = 0.01,
                   trace = FALSE,
@@ -124,17 +126,17 @@ rrGDM <- function(Y,
     n_lv = k
   )
 
-  n_diag_beta  <- min(n_env, k)
-  n_lower_beta <- sum(row(matrix(0, n_env, k)) > col(matrix(0, n_env, k)))
-  n_upper_beta <- sum(row(matrix(0, n_env, k)) < col(matrix(0, n_env, k)))
+  n_diag_lambda  <- min(n_env, k)
+  n_lower_lambda <- sum(row(matrix(0, n_env, k)) > col(matrix(0, n_env, k)))
+  n_upper_lambda <- sum(row(matrix(0, n_env, k)) < col(matrix(0, n_env, k)))
 
   parameters <- list(
-    beta_diag = rnorm(n_diag_beta, 0, init_jitter),
-    beta_lower = rnorm(n_lower_beta, 0, init_jitter),
-    beta_upper = rnorm(n_upper_beta, 0, init_jitter),
+    lambda_diag = rnorm(n_diag_lambda, 0, init_jitter),
+    lambda_lower = rnorm(n_lower_lambda, 0, init_jitter),
+    lambda_upper = rnorm(n_upper_lambda, 0, init_jitter),
     u_sample = matrix(rnorm(n_samples*k,0, init_jitter), n_samples, k),
     log_scale = ifelse(family == "beta", 2, -1), # phi starts at ~7.4 for Beta
-    lambda = rep(0, ncol(data_design$W_design)),
+    beta = rep(0, ncol(data_design$W_design)),
     u = matrix(0, nrow = ncol(data_design$Z_design), ncol = k),
     log_sigma_re = rep(0, data_design$n_re_vars)
   )
@@ -148,10 +150,10 @@ rrGDM <- function(Y,
     mapping$log_scale <- factor(rep(NA, length(parameters$log_scale)))
   }
 
-  # Upper triangle of Beta is zero and therefore ignored
+  # Upper triangle of lambda is zero and therefore ignored
   if (constraint == 1) {
-    mapping$beta_upper <- factor(rep(NA, length(parameters$beta_upper)))
-    parameters$beta_upper <- 0
+    mapping$lambda_upper <- factor(rep(NA, length(parameters$lambda_upper)))
+    parameters$lambda_upper <- 0
   }
 
   if (!sample_error) {
@@ -216,8 +218,10 @@ rrGDM <- function(Y,
     link = link,
     formula = formula,
     formula_fix = data_design$formula_fix,
-    formula_sd = formula_sd)
+    formula_sd = formula_sd,
+    call = match.call())
 
+  class(result) <- "rrGDM"
   return(res)
 }
 
