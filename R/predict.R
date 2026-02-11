@@ -54,7 +54,7 @@ predict.rrGDM <- function(object,
   # Inverse link
   inv_link <- switch(object$link,
                      'negexp' = function(x) 1 - exp(-x),
-                     'gauss' = function(x) 1 - exp(-(x^2)),
+                     'neggaus' = function(x) 1 - exp(-(x^2)),
                      'identity' = function(x) x)
 
   if (type == 'link') inv_link <- function(x) x
