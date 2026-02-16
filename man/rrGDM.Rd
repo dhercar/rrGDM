@@ -64,5 +64,5 @@ rrGDM(
 An object of class 'rrGDM' containing the fitted model object, the optimized parameters, and other relevant information.
 }
 \description{
-Fit a reduced-ranked Generalised Dissimilarity Model using TMB
+Fit a reduced-rank Generalised Dissimilarity Model using TMB
 }

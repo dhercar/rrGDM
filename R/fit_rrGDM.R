@@ -16,6 +16,7 @@
 #' @param sample_error Logical. If TRUE, includes site-level random effects to account for variation not explained by predictors.
 #' @param seed An integer specifying the seed for random number generation. Default is NULL.
 #' @param init_jitter Numeric. A small standard deviation used to jitter initial parameter values.
+#' @param find_initials A character string specifying a method used to obtain initial values for optimisation. Currently, only \code{find_initials = 'PCOA'} available.
 #' @param control A list of control parameters passed to stats::nlminb
 #' @return An object of class 'rrGDM' containing the fitted model object, the optimized parameters, and other relevant information.
 #' @importFrom TMB MakeADFun sdreport
@@ -37,6 +38,7 @@ rrGDM <- function(Y,
                   trans = function(x) x,
                   seed = NULL,
                   init_jitter = 0.01,
+                  find_initials = 'PCOA',
                   trace = FALSE,
                   control = list()) {
 
@@ -47,13 +49,14 @@ rrGDM <- function(Y,
   # - X has no NA
   # - formula_sd has *at least* an intercept
 
-  # Already taken care of:
+  # Already taken care of by other functions:
   #  - binary is logical is checked by make_y_df()
   # - `trans` is null or a function is checked by make_y_df()
   # - `formula` and `formula_sd` are already checked within prep_data()
   # - dist method is already checked within make_Y_diss()
 
   # ---------- 1. DATA PREP ----------
+  cli::cli_process_start('Preparing data')
 
   # Map Family and Link to index
   fam_idx <- switch(family,
@@ -98,7 +101,7 @@ rrGDM <- function(Y,
   if ((constraint == 2) && !sample_error) cli::cli_abort('sample_error needs to be set to TRUE if constraint = 2')
   if ((constraint == 2) && k > n_samples) cli::cli_abort(paste0("k (", k, ") cannot be larger than the number of samples (", n_samples, ")."))
 
-  # ---------- 3. SET PARAMETER SIZES ----------
+  # ---------- 3. SET PARAM SIZE ----------
   # I define diagonal, upper and lower matrix independently to allow constraints
 
   # BETA: Loading matrix: n_env x k
@@ -106,12 +109,7 @@ rrGDM <- function(Y,
   n_lower_beta <- sum(row(matrix(0, n_env, k)) > col(matrix(0, n_env, k)))
   n_upper_beta <- sum(row(matrix(0, n_env, k)) < col(matrix(0, n_env, k)))
 
-  # U: Sample error matrix: n_samples x k
-  n_diag_u  <- min(n_samples, k)
-  n_lower_u <- sum(row(matrix(0, n_samples, k)) > col(matrix(0, n_samples, k)))
-  n_upper_u <- sum(row(matrix(0, n_samples, k)) < col(matrix(0, n_samples, k)))
-
-  # ---------- 4. TMB DATA & PARAMETERS ----------
+  # ---------- 4. TMB DATA AND PARAM ----------
   tmb_data <- list(
     Y = as.vector(Y_val),
     Y_den = as.vector(Y_den),
@@ -143,17 +141,19 @@ rrGDM <- function(Y,
     log_sigma_re = rep(0, data_design$n_re_vars)
   )
 
+  if (sample_error == F) parameters$u_sample <- matrix(1, nrow = 1, ncol = 1)
+
   # ---------- 5. IGNORE PARAMETERS ----------
 
   mapping <- list()
 
-  # Ignore scale parameter if binomial
   if (family == 'binomial') {
+    # Ignore scale parameter if binomial
     mapping$log_scale <- factor(rep(NA, length(parameters$log_scale)))
   }
 
-  # Upper triangle of lambda is zero and therefore ignored
   if (constraint == 1) {
+    # Upper triangle of lambda is zero and ignored in optimisation
     mapping$lambda_upper <- factor(rep(NA, length(parameters$lambda_upper)))
     parameters$lambda_upper <- 0
   }
@@ -175,7 +175,25 @@ rrGDM <- function(Y,
     mapping$log_sigma_re <- factor(rep(NA, length(parameters$log_sigma_re)))
   }
 
-  # --- 5. FIT MODEL ---
+  cli::cli_process_done()
+
+
+  if ( find_initials == 'PCOA' ) {
+    cli::cli_process_start('Finding initial parameters')
+    loadings <- rrGDM:::initial_loadings(Y,
+                                         dist_method = dist_method,
+                                         k = k,
+                                         QR = TRUE,
+                                         link = link,
+                                         binary = binary)
+
+    parameters$u_sample <- as.matrix(loadings$u_sample)
+    parameters$beta[1] <- log(sd(loadings$u_sample))
+    cli::cli_progress_done()
+  }
+
+  # --- 6. FIT MODEL ---
+
   obj <- TMB::MakeADFun(
     data = tmb_data,
     parameters = parameters,
@@ -189,15 +207,17 @@ rrGDM <- function(Y,
   control_def <- list(rel.tol = 1e-10, eval.max = 1000, iter.max = 1000, trace = 0)
   control_def[names(control)] <- control # change user preferences
 
+
   # optimise
+  cli::cli_process_start('optimisation')
   opt <- stats::nlminb(
     start = obj$par,
     objective = obj$fn,
     gradient = obj$gr,
     control = control_def
   )
-
   cat(opt$message)
+  cli::cli_process_done()
 
   # SD report
   sd_rep <- NULL
