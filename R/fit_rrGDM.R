@@ -16,7 +16,7 @@
 #' @param sample_error Logical. If TRUE, includes site-level random effects to account for variation not explained by predictors.
 #' @param seed An integer specifying the seed for random number generation. Default is NULL.
 #' @param init_jitter Numeric. A small standard deviation used to jitter initial parameter values.
-#' @param find_initials A character string specifying a method used to obtain initial values for optimisation. Currently, only \code{find_initials = 'PCOA'} available.
+#' @param init_method A character string specifying a method used to obtain initial values for optimisation. Currently, only \code{init_method = 'PCOA'} available.
 #' @param control A list of control parameters passed to stats::nlminb
 #' @return An object of class 'rrGDM' containing the fitted model object, the optimized parameters, and other relevant information.
 #' @importFrom TMB MakeADFun sdreport
@@ -34,11 +34,12 @@ rrGDM <- function(Y,
                   link = NULL,
                   se = TRUE,
                   sample_error = TRUE,
-                  constraint = 1,
+                  constraint = 2,
                   trans = function(x) x,
                   seed = NULL,
-                  init_jitter = 0.01,
-                  find_initials = 'PCOA',
+                  init_jitter = 0.001,
+                  n_starts = 10,
+                  init_method = 'PCOA',
                   trace = FALSE,
                   control = list()) {
 
@@ -81,7 +82,10 @@ rrGDM <- function(Y,
 
 
   # Prep. diss data
-  Y_df <- make_Y_diss(Y, trans = trans, binary = binary, num_den = (family == 'binomial'))
+  Y_df <- make_Y_diss(Y, trans = trans,
+                      binary = binary,
+                      method = dist_method,
+                      num_den = (family == 'binomial'))
   D_mat <- Y_df[, c(1,2)]                                                              # Design (row col pairs)
   Y_val <- Y_df[,3]
   Y_val <- scale_dist(Y_val, sort(scale_diss))                                         # scale between set interval, if defined
@@ -92,7 +96,7 @@ rrGDM <- function(Y,
 
   # ---------- 2. IDENTIFIABILITY CHECKS ----------
 
-  n_env <- if (!is.null(data_design$X_design)) ncol(data_design$X_design) else 0
+  n_env <- ncol(data_design$X_design)
   n_samples <- nrow(Y)
 
   # Check constraints
@@ -134,8 +138,9 @@ rrGDM <- function(Y,
     lambda_diag = rnorm(n_diag_lambda, 0, init_jitter),
     lambda_lower = rnorm(n_lower_lambda, 0, init_jitter),
     lambda_upper = rnorm(n_upper_lambda, 0, init_jitter),
+  #  log_alpha = log(0.001),
     u_sample = matrix(rnorm(n_samples*k,0, init_jitter), n_samples, k),
-    log_scale = ifelse(family == "beta", 2, -1), # phi starts at ~7.4 for Beta
+    log_scale = ifelse(family == "beta", 3, -1), # phi starts at ~7.4 for Beta
     beta = rep(0, ncol(data_design$W_design)),
     u = matrix(0, nrow = ncol(data_design$Z_design), ncol = k),
     log_sigma_re = rep(0, data_design$n_re_vars)
@@ -178,18 +183,53 @@ rrGDM <- function(Y,
   cli::cli_process_done()
 
 
-  if ( find_initials == 'PCOA' ) {
-    cli::cli_process_start('Finding initial parameters')
-    loadings <- rrGDM:::initial_loadings(Y,
+  if (init_method == 'PCOA' && constraint == 2) {
+    cli::cli_process_start('Finding initial parameters (PCOA)')
+    loadings <- rrGDM:::initial_loadings(trans(Y),
                                          dist_method = dist_method,
+                                         k = k,
+                                         QR = TRUE,
+                                         init_method = 'PCOA',
+                                         link = link,
+                                         binary = binary)
+ #   parameters$log_alpha <- log(loadings$alpha_init)
+    parameters$u_sample <- as.matrix(loadings$u_sample)
+    parameters$beta[1] <- log(sd(loadings$u_sample))
+    cli::cli_process_done()
+  } else if (init_method == 'NMDS' && constraint == 2) {
+    cli::cli_process_start('Finding initial parameters (NMDS)')
+    loadings <- rrGDM:::initial_loadings(trans(Y),
+                                         dist_method = dist_method,
+                                         k = k,
+                                         QR = TRUE,
+                                         init_method = 'NMDS',
+                                         link = link,
+                                         binary = binary)
+    #   parameters$log_alpha <- log(loadings$alpha_init)
+    parameters$u_sample <- as.matrix(loadings$u_sample)
+    parameters$beta[1] <- log(sd(loadings$u_sample))
+    cli::cli_process_done()
+  } else if (init_method == 'dbRDA' && constraint == 2) {
+    cli::cli_process_start('Finding initial parameters (dbRDA)')
+    loadings <- rrGDM:::initial_loadings(trans(Y),
+                                         X_design = data_design$X_design,
+                                         dist_method = dist_method,
+                                         init_method = 'NMDS',
                                          k = k,
                                          QR = TRUE,
                                          link = link,
                                          binary = binary)
-
-    parameters$u_sample <- as.matrix(loadings$u_sample)
+ #   parameters$log_alpha <- log(loadings$alpha_init)
+    parameters$u_sample <- parameters$u_sample + as.matrix(loadings$u_sample)
     parameters$beta[1] <- log(sd(loadings$u_sample))
-    cli::cli_progress_done()
+
+    if (!is.null(loadings$lambda_init)) {
+      parameters$lambda_diag  <- parameters$lambda_diag + c(diag(loadings$lambda_init))
+      parameters$lambda_lower <- parameters$lambda_lower + c(loadings$lambda_init[lower.tri(loadings$lambda_init)])
+      parameters$lambda_upper <- parameters$lambda_upper + c(loadings$lambda_init[upper.tri(loadings$lambda_init)])
+    }
+
+    cli::cli_process_done()
   }
 
   # --- 6. FIT MODEL ---
@@ -203,25 +243,50 @@ rrGDM <- function(Y,
     map = mapping,
   )
 
-  # nlminb control default
-  control_def <- list(rel.tol = 1e-10, eval.max = 1000, iter.max = 1000, trace = 0)
-  control_def[names(control)] <- control # change user preferences
 
+  control_def <- list(rel.tol = 1e-10, iter.max = 1000)   # nlminb control default
+  control_def[names(control)] <- control  # change user preferences
 
   # optimise
   cli::cli_process_start('optimisation')
-  opt <- stats::nlminb(
-    start = obj$par,
-    objective = obj$fn,
-    gradient = obj$gr,
-    control = control_def
-  )
-  cat(opt$message)
+  best_obj <- Inf
+  best_par <- obj$par
+  best_fit <- NULL
+
+  for (i in seq_len(n_starts)) {
+    # jitter starting values (first restart uses original obj$par)
+    start <- if (i == 1) obj$par else best_par + rnorm(length(obj$par), 0, init_jitter)
+    fit <- tryCatch(
+      stats::nlminb(start = start,
+                    objective = obj$fn,
+                    gradient = obj$gr,
+                    control = control_def),
+
+      error = function(e) list(objective = Inf, par = start)
+    )
+
+    if (is.finite(fit$objective) && fit$objective < best_obj) {
+      cat('new best: ')
+      best_obj <- fit$objective
+      best_fit <- fit
+      best_par <- fit$par
+    }
+
+    cat('model ', i, '; ', fit$objective, '\n')
+  }
+
   cli::cli_process_done()
 
   # SD report
   sd_rep <- NULL
-  if (se == TRUE) sd_rep <- TMB::sdreport(obj)
+  if (se == TRUE) {
+    sd_rep <- tryCatch(
+      TMB::sdreport(obj, bias.correct = TRUE),
+      error = function(e) {
+        cli::cli_warn('Hessian at optimum is not positive definite.')
+        NULL
+      })
+  }
 
   res <- list(
     Y = Y,
@@ -232,7 +297,7 @@ rrGDM <- function(Y,
     W_design = data_design$W_design,
     Z_design = data_design$Z_design,
     map_re = data_design$map_re,
-    opt = opt,
+    opt = fit,
     obj = obj,
     sd_rep = sd_rep,
     k = k,
