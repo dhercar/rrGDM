@@ -297,7 +297,7 @@ rrGDM <- function(Y,
     W_design = data_design$W_design,
     Z_design = data_design$Z_design,
     map_re = data_design$map_re,
-    opt = fit,
+    opt = best_fit,
     obj = obj,
     sd_rep = sd_rep,
     k = k,
@@ -306,7 +306,14 @@ rrGDM <- function(Y,
     formula = formula,
     formula_fix = data_design$formula_fix,
     formula_sd = formula_sd,
-    call = match.call())
+    terms_fix = data_design$terms_fix,
+    terms_sd  = data_design$terms_sd,
+    xlevels_fix   = data_design$xlevels_fix,
+    xlevels_sd    = data_design$xlevels_sd,
+    contrasts_fix = data_design$contrasts_fix,
+    contrasts_sd  = data_design$contrasts_sd,
+    call = match.call()
+  )
 
   class(res) <- "rrGDM"
   return(res)

@@ -67,12 +67,49 @@ predict.rrGDM <- function(object,
     W_design <- object$W_design
 
   } else {
-    # Use new data
+
     X_new <- data.frame(X_new)
-    W_new <- data.frame(X_new)
-    X_design <- model.matrix(object$formula_fix, data = X_new)
-    X_design <- X_design[, !colnames(X_design) %in% "(Intercept)", drop = FALSE] # remove intercept
-    W_design <- model.matrix(object$formula_sd, data = X_new)
+
+    tt_fix <- delete.response(object$terms_fix)
+
+    mf_fix <- model.frame(
+      tt_fix,
+      data = X_new,
+      xlev = object$xlevels_fix,
+      na.action = na.pass
+    )
+
+    X_tmp <- model.matrix(
+      tt_fix,
+      data = mf_fix,
+      contrasts.arg = object$contrasts_fix
+    )
+
+    # Remove intercept if needed
+    if ("(Intercept)" %in% colnames(X_tmp)) {
+      intercept_idx <- which(colnames(X_tmp) == "(Intercept)")
+      X_design <- X_tmp[, -intercept_idx, drop = FALSE]
+      attr(X_design, "assign") <- attr(X_tmp, "assign")[-intercept_idx]
+      attr(X_design, "contrasts") <- object$contrasts_fix
+    } else {
+      X_design <- X_tmp
+    }
+
+    # --- DISPERSION MODEL ---
+    tt_sd <- delete.response(object$terms_sd)
+
+    mf_sd <- model.frame(
+      tt_sd,
+      data = X_new,
+      xlev = object$xlevels_sd,
+      na.action = na.pass
+    )
+
+    W_design <- model.matrix(
+      tt_sd,
+      data = mf_sd,
+      contrasts.arg = object$contrasts_sd
+    )
   }
 
   if (boot) { # Return samples
