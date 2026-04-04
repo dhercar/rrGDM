@@ -46,8 +46,19 @@ prepare_data <- function(formula = NULL,
   } else {
     # Fixed part
     fixed_formula <- lme4::nobars(formula)
-    X_design <- model.matrix(fixed_formula, data)
-    X_design <- X_design[, !colnames(X_design) %in% "(Intercept)", drop = FALSE] # remove intercept
+    X_tmp <- model.matrix(fixed_formula, data)
+
+    if ('(Intercept)' %in% colnames(X_tmp)) {
+      assign_attr <- attr(X_tmp, "assign")[-1]
+      contr_attr <- attr(X_tmp, "contrasts")
+      X_design <- X_tmp[, !colnames(X_tmp) %in% "(Intercept)", drop = FALSE] # remove intercept
+      attr(X_design, "assign") <- assign_attr
+      attr(X_design, "contrasts") <- contr_attr
+    } else {
+      X_design <- X_tmp
+    }
+
+    X_design
 
     # SD eq
     if (!is.null(lme4::findbars(formula_sd))) {
