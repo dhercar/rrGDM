@@ -21,6 +21,7 @@
 #' @seealso [drop1.rrGDM()] for sequential single-term deletion tests.
 #'
 #' @export
+#' @method drop1 rrGDM
 anova.rrGDM <- function(object, object2, ...) {
   if (missing(object2)) {
     cli::cli_abort(
@@ -93,6 +94,7 @@ anova.rrGDM <- function(object, object2, ...) {
 #' @seealso [anova.rrGDM()] for a direct two-model comparison.
 #'
 #' @export
+#' @method drop1 rrGDM
 drop1.rrGDM <- function(object, ...) {
   fix_terms     <- attr(terms(object$formula_fix, data = object$data_frame), "term.labels")
   original_call <- object$call

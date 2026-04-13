@@ -20,12 +20,13 @@ Type objective_function<Type>::operator() ()
   DATA_INTEGER(n_lv);           // n latent dimensions
 
   // Parameters
+//  PARAMETER(log_alpha);                   // Scale parameter
   PARAMETER_VECTOR(lambda_diag);          // lambda diagonal(env. loadings)
   PARAMETER_VECTOR(lambda_upper);         // lambda, upper triangle
   PARAMETER_VECTOR(lambda_lower);         // lambda, lower triangle
-  PARAMETER_MATRIX(u_sample);           // U (sample error)
-  PARAMETER(log_scale);                 // Scale parameter
-  PARAMETER_VECTOR(beta);             // effects on sigma
+  PARAMETER_MATRIX(u_sample);            // U (sample error)
+  PARAMETER(log_scale);                  // Scale parameter
+  PARAMETER_VECTOR(beta);              // effects on sigma
   PARAMETER_MATRIX(u);                  // additional random effects ()intercepts)
   PARAMETER_VECTOR(log_sigma_re);       // log of SD for each RE term
 
@@ -34,10 +35,10 @@ Type objective_function<Type>::operator() ()
   int n_samples = X.rows();             // number of samples (dissimilarities)
   int n_env = X.cols();                 // number of env. variables
   vector<Type> sigma_re = exp(log_sigma_re);
+//  Type alpha = exp(log_alpha);
 
   Type SD = 0;                          // SD of Gaussian family
-  Type phi = 0;                         // phi of beta (and beta binomial) distribution
-
+  Type phi = 0;                         // phi of beta (and beta binomial) distribution        //
 
   // ---------- 2. LOADINGS AND CONSTRAINS ---------
 
@@ -57,8 +58,9 @@ Type objective_function<Type>::operator() ()
 
   // Lower
   int idx = 0;
-  for(int i = 0; i < n_env; i++){
-    for(int j = 0; j < n_lv; j++){
+
+  for(int j = 0; j < n_lv; j++){         // Outer loop: Columns
+    for(int i = 0; i < n_env; i++){      // Inner loop: Rows
       if(i > j){
         lambda(i, j) = lambda_lower(idx++);
       }
@@ -66,10 +68,10 @@ Type objective_function<Type>::operator() ()
   }
 
   // Upper
-  if (constraint != 1) { // Upper tri remains 0s and ignored through 'map' in model fitting function when constraint = 2
+  if (constraint != 1) {
     idx = 0;
-    for(int i = 0; i < n_env; i++){
-      for(int j = 0; j < n_lv; j++){
+    for(int j = 0; j < n_lv; j++){       // Outer loop: Columns
+      for(int i = 0; i < n_env; i++){    // Inner loop: Rows
         if(i < j){
           lambda(i, j) = lambda_upper(idx++);
         }
@@ -116,35 +118,37 @@ Type objective_function<Type>::operator() ()
 
   // Distribution-specific scale parameters (if any)
   if (family == 0) {
-    SD = exp(log_scale); // Gaussian SD
-  } else if (family == 2) {
-    phi = exp(log_scale); // Beta scale
+    SD = exp(log_scale); // SD for gaussian
+  } else if (family == 2 || family == 3) {
+    phi = exp(log_scale); // phi for beta
   }
 
-  // Loop through each pair of sites
+  // for each pair of sites
   for (int i = 0; i < n_pairs; i++) {
-    // Convert matrix elements to integers
+
     int s1 = CppAD::Integer(D(i, 0));
     int s2 = CppAD::Integer(D(i, 1));
 
-    // Calculate squared Euclidean distance between latent positions (L)
+    // Calculate (squared) Euclidean distance between latent positions (L)
     Type dist_2 = 0.0;
     for(int k = 0; k < n_lv; k++) {
       Type diff = L(s1, k) - L(s2, k);
       dist_2 += diff * diff;
     }
 
+    Type dist = sqrt(dist_2 + 1e-10); // adding + 1e-10 to avid crash if points have same latnet position
+
     // Apply inverse link
     Type mu;
     switch (link) {
     case 1:
-      mu = Type(1) - exp(-sqrt(dist_2));
+      mu = Type(1) - exp(-(dist));
       break;
     case 2:
-      mu = Type(1) - exp(-dist_2);
+      mu = Type(1) - exp(-(dist_2));  // nugget on squared distance scale
       break;
     default:
-      mu = sqrt(dist_2);
+      mu = dist;
     break;
     }
 
@@ -162,25 +166,45 @@ Type objective_function<Type>::operator() ()
         nll -= dbeta(Y(i), a, b, true);
         break;
       }
+    case 3: { // Beta-Binomial
+      Type a = mu * phi;
+      Type b = (Type(1) - mu) * phi;
+      Type log_lik =
+        lgamma(Y_den(i) + Type(1)) - lgamma(Y(i) + Type(1)) - lgamma(Y_den(i) - Y(i) + Type(1))
+        + lgamma(Y(i) + a) + lgamma(Y_den(i) - Y(i) + b) - lgamma(Y_den(i) + a + b)
+        - lgamma(a) - lgamma(b) + lgamma(a + b);
+        nll -= log_lik;
+        break;
+     }
     }
+  }
 
+  // Calculate mod of lambda (total effect)
+  vector<Type> lambda_mod(n_env);  // vector of magnitudes
+  for(int i = 0; i < n_env; i++){
+    lambda_mod(i) = sqrt((lambda.row(i) * lambda.row(i).transpose()).sum());
   }
 
   // Report intermediate variables
+  // REPORT(alpha);
   REPORT(lambda);                            // environmental loadings
+  REPORT(lambda_mod);
   REPORT(beta);                              // Effects on dispersion (SD of sample-level error)
   REPORT(sigma_re);                          // SD of other random effects
   REPORT(L);                                 // Site loadings (conditional) for plot
   REPORT(L_m);                               // Site loadings (marginal) for plot
+
+
   if (has_sample_re) REPORT(u_sample);       // U: Sample-level error loadings
 
   // report SE
   ADREPORT(lambda);                        // B: Env. loadings
+  ADREPORT(lambda_mod);
   ADREPORT(beta);                          // Effects on dispersion (SD sample error)
   ADREPORT(sigma_re);                      // SD of other random effects
 
   if (family == 0) ADREPORT(SD);
-  if (family == 2) ADREPORT(phi);
+  if (family == 2 || family == 3) ADREPORT(phi);
 
   return nll;
 }

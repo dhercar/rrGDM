@@ -64,13 +64,15 @@ rrGDM <- function(Y,
                     "gaussian" = 0,
                     "binomial" = 1,
                     "beta" = 2,
+                    "beta.binomial" = 3,
                     cli::cli_abort("Family not supported"))
 
   if (is.null(link)) {
     link <- switch(family,
                        "gaussian" = 'identity',
                        "binomial" = 'negexp',
-                       "beta" = 'negexp')
+                       "beta" = 'negexp',
+                       "beta.binomial" = 'negexp')
   }
 
   link_idx <- switch(link,
@@ -85,17 +87,16 @@ rrGDM <- function(Y,
   Y_df <- make_Y_diss(Y, trans = trans,
                       binary = binary,
                       method = dist_method,
-                      num_den = (family == 'binomial'))
+                      num_den = (family %in% c('binomial', 'beta.binomial')))
   D_mat <- Y_df[, c(1,2)]                                                              # Design (row col pairs)
   Y_val <- Y_df[,3]
   Y_val <- scale_dist(Y_val, sort(scale_diss))                                         # scale between set interval, if defined
-  Y_den  <- if (family == 'binomial') as.numeric(Y_df[, 4]) else rep(1, length(Y_val)) # Denominator (used in binomial)
+  Y_den  <- if (family %in% c('binomial', 'beta.binomial')) as.numeric(Y_df[, 4]) else rep(1, length(Y_val)) # Denominator (used in binomial)
 
   # Prep predictors
   data_design <- prepare_data(formula = formula, formula_sd = formula_sd, data = X, n = nrow(Y))
 
   # ---------- 2. IDENTIFIABILITY CHECKS ----------
-
   n_env <- ncol(data_design$X_design)
   n_samples <- nrow(Y)
 
@@ -108,10 +109,11 @@ rrGDM <- function(Y,
   # ---------- 3. SET PARAM SIZE ----------
   # I define diagonal, upper and lower matrix independently to allow constraints
 
-  # BETA: Loading matrix: n_env x k
-  n_diag_beta  <- min(n_env, k)
-  n_lower_beta <- sum(row(matrix(0, n_env, k)) > col(matrix(0, n_env, k)))
-  n_upper_beta <- sum(row(matrix(0, n_env, k)) < col(matrix(0, n_env, k)))
+  #: Loading matrix: n_env x k
+  n_diag_lambda  <- min(n_env, k)
+  n_lower_lambda <- sum(row(matrix(0, n_env, k)) > col(matrix(0, n_env, k)))
+  n_upper_lambda <- sum(row(matrix(0, n_env, k)) < col(matrix(0, n_env, k)))
+
 
   # ---------- 4. TMB DATA AND PARAM ----------
   tmb_data <- list(
@@ -130,23 +132,19 @@ rrGDM <- function(Y,
     n_lv = k
   )
 
-  n_diag_lambda  <- min(n_env, k)
-  n_lower_lambda <- sum(row(matrix(0, n_env, k)) > col(matrix(0, n_env, k)))
-  n_upper_lambda <- sum(row(matrix(0, n_env, k)) < col(matrix(0, n_env, k)))
-
   parameters <- list(
-    lambda_diag = rnorm(n_diag_lambda, 0, init_jitter),
-    lambda_lower = rnorm(n_lower_lambda, 0, init_jitter),
-    lambda_upper = rnorm(n_upper_lambda, 0, init_jitter),
+    lambda_diag = rnorm(n_diag_lambda, 0, 1e-5),
+    lambda_lower = rnorm(n_lower_lambda, 0,  1e-5),
+    lambda_upper = rnorm(n_upper_lambda, 0,  1e-5),
   #  log_alpha = log(0.001),
-    u_sample = matrix(rnorm(n_samples*k,0, init_jitter), n_samples, k),
-    log_scale = ifelse(family == "beta", 3, -1), # phi starts at ~7.4 for Beta
+    u_sample = matrix(rnorm(n_samples*k,0,  1e-5), n_samples, k),
+    log_scale = ifelse(family %in% c("beta", 'beta.binomial'), 2, -1), # phi starts at ~7.4 for Beta
     beta = rep(0, ncol(data_design$W_design)),
     u = matrix(0, nrow = ncol(data_design$Z_design), ncol = k),
     log_sigma_re = rep(0, data_design$n_re_vars)
   )
 
-  if (sample_error == F) parameters$u_sample <- matrix(1, nrow = 1, ncol = 1)
+  if (sample_error == FALSE) parameters$u_sample <- matrix(1, nrow = 1, ncol = 1)
 
   # ---------- 5. IGNORE PARAMETERS ----------
 
@@ -189,23 +187,9 @@ rrGDM <- function(Y,
                                          dist_method = dist_method,
                                          k = k,
                                          QR = TRUE,
-                                         init_method = 'PCOA',
                                          link = link,
                                          binary = binary)
  #   parameters$log_alpha <- log(loadings$alpha_init)
-    parameters$u_sample <- as.matrix(loadings$u_sample)
-    parameters$beta[1] <- log(sd(loadings$u_sample))
-    cli::cli_process_done()
-  } else if (init_method == 'NMDS' && constraint == 2) {
-    cli::cli_process_start('Finding initial parameters (NMDS)')
-    loadings <- rrGDM:::initial_loadings(trans(Y),
-                                         dist_method = dist_method,
-                                         k = k,
-                                         QR = TRUE,
-                                         init_method = 'NMDS',
-                                         link = link,
-                                         binary = binary)
-    #   parameters$log_alpha <- log(loadings$alpha_init)
     parameters$u_sample <- as.matrix(loadings$u_sample)
     parameters$beta[1] <- log(sd(loadings$u_sample))
     cli::cli_process_done()
@@ -214,7 +198,6 @@ rrGDM <- function(Y,
     loadings <- rrGDM:::initial_loadings(trans(Y),
                                          X_design = data_design$X_design,
                                          dist_method = dist_method,
-                                         init_method = 'NMDS',
                                          k = k,
                                          QR = TRUE,
                                          link = link,
@@ -250,12 +233,12 @@ rrGDM <- function(Y,
   # optimise
   cli::cli_process_start('optimisation')
   best_obj <- Inf
-  best_par <- obj$par
   best_fit <- NULL
+  init_par <- c(obj$par)
 
   for (i in seq_len(n_starts)) {
     # jitter starting values (first restart uses original obj$par)
-    start <- if (i == 1) obj$par else best_par + rnorm(length(obj$par), 0, init_jitter)
+    if (i == 1) start <- init_par else start <- init_par + rnorm(length(obj$par), 0, init_jitter)
     fit <- tryCatch(
       stats::nlminb(start = start,
                     objective = obj$fn,
@@ -269,7 +252,6 @@ rrGDM <- function(Y,
       cat('new best: ')
       best_obj <- fit$objective
       best_fit <- fit
-      best_par <- fit$par
     }
 
     cat('model ', i, '; ', fit$objective, '\n')
@@ -277,6 +259,7 @@ rrGDM <- function(Y,
 
   cli::cli_process_done()
 
+  obj$fn(best_fit$par)
   # SD report
   sd_rep <- NULL
   if (se == TRUE) {
@@ -287,6 +270,7 @@ rrGDM <- function(Y,
         NULL
       })
   }
+
 
   res <- list(
     Y = Y,

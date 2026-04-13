@@ -6,6 +6,7 @@
 \usage{
 initial_loadings(
   Y,
+  X_design = NULL,
   dist_method = "bray",
   binary = FALSE,
   k = 2,
@@ -15,6 +16,8 @@ initial_loadings(
 }
 \arguments{
 \item{Y}{A \code{matrix} of community data (sites x species).}
+
+\item{X_design}{If provided, a design \code{matrix} passed as \code{data} to invegan:: dbRDA.}
 
 \item{dist_method}{Character string for \code{vegan::vegdist}.}
 
@@ -27,7 +30,12 @@ initial_loadings(
 \item{QR}{Logical; if \code{TRUE}, constrains the Site matrix to be lower triangular.}
 }
 \value{
-A \code{list} containing \code{u_sample} and \code{var_explained}.
+A \code{list} containing:
+\itemize{
+  \item \code{u_sample}: Matrix of site-level latent variables (n x k).
+  \item \code{lambda_init}: Matrix of environmental loadings (p x k).
+  \item \code{var_explained}: Proportion of variance captured by the k dimensions.
+}
 }
 \description{
 Provides starting values for site-level latent variables.
