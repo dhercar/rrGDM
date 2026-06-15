@@ -112,8 +112,21 @@ predict.rrGDM <- function(object,
     )
   }
 
+  if (!ordination && nrow(X_new) < 2) {
+    cli::cli_abort(c(
+      "x" = "Pairwise dissimilarity prediction requires at least 2 rows in {.arg X_new}.",
+      "i" = "Set {.arg ordination = TRUE} to predict latent coordinates for a single row."
+    ))
+  }
+
   if (boot) { # Return samples
     if (sample_param) { # Parametric bootstrapping?
+      if (is.null(object$sd_rep)) {
+        cli::cli_abort(c(
+          "x" = "Parameter bootstrapping requires standard errors, but this model has no {.field sd_rep}.",
+          "i" = "Refit with {.code se = TRUE}, or set {.code sample_param = FALSE}."
+        ))
+      }
       sim <- MASS::mvrnorm(n = n_sim, mu = object$sd_rep$value, Sigma = object$sd_rep$cov) # sample from vcov
       samples <- lapply(1:nrow(sim), function(x){ # Expected coordinates
         sim_i <- sim[x,]
@@ -176,5 +189,4 @@ predict.rrGDM <- function(object,
     }
   }
 }
-
 
