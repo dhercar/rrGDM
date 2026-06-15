@@ -259,6 +259,13 @@ rrGDM <- function(Y,
 
   cli::cli_process_done()
 
+  if (is.null(best_fit)) {
+    cli::cli_abort(c(
+      "x" = "Model optimisation failed for all {.arg n_starts} starting values.",
+      "i" = "Try increasing {.arg n_starts}, changing {.arg init_method}, or simplifying the model."
+    ))
+  }
+
   obj$fn(best_fit$par)
   # SD report
   sd_rep <- NULL
@@ -320,7 +327,6 @@ include_se <- function(obj, ...) {
   obj$sd_rep <- sd_rep
   return(obj)
 }
-
 
 
 
