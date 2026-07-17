@@ -276,7 +276,7 @@ rrGDM <- function(Y,
 
   if (se == TRUE) {
     sd_rep <- tryCatch(
-      TMB::sdreport(obj, getJointPrecision = TRUE, getReportCovariance = FALSE),
+      TMB::sdreport(obj, getReportCovariance = TRUE),
       error = function(e) {
         cli::cli_warn('standard errors could not be computed. Hessian at optimum might not positive definite.')
         NULL
