@@ -40,7 +40,7 @@ initial_loadings <- function(Y,
                              constraint = 2,
                              QR  = TRUE) {
 
-  if (contraint == 0) QR <- FALSE
+  if (constraint == 0) QR <- FALSE
 
   # Safe sign to avoid exact 0s
   sign2 <- function(x) ifelse(x >= 0, 1, -1)
