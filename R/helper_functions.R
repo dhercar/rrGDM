@@ -34,3 +34,17 @@ bray_num_den <- function(x, y) {
   return(c(num_bra = num, den_bra = den))
 }
 
+#' Build inverse-link function for an rrGDM model
+#'
+#' @param link Character string: "identity", "negexp", or "neggaus".
+#' @return A function mapping latent Euclidean distance to expected dissimilarity.
+#' @noRd
+make_inv_link <- function(link) {
+  switch(link,
+         'identity' = function(x) x,
+         'negexp'   = function(x) 1 - exp(-x),
+         'neggaus'  = function(x) 1 - exp(-(x^2)),
+         cli::cli_abort("Link {.val {link}} is not supported."))
+}
+
+

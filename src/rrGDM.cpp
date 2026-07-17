@@ -2,207 +2,159 @@
 template<class Type>
 Type objective_function<Type>::operator() ()
 {
-  // ---------- 1. DATA AND PARAMETERS ---------
 
-  // Data
-  DATA_VECTOR(Y);               // pairwise dissimilarities ()[0,1] for Beta distribution)
-  DATA_VECTOR(Y_den);           // vector of total amount of species
-  DATA_MATRIX(X);               // environmental var (n_samples x n_env)
-  DATA_MATRIX(W);               // effects on sigma
-  DATA_MATRIX(D);               // matrix mapping Z to sample pairs (n_pairs x 2)
-  DATA_SPARSE_MATRIX(Z);        // extra random effects
+  // DATA
+  DATA_VECTOR(Y);      // pairwise dissimilarities (num)
+  DATA_VECTOR(Y_den);  // pairwise dissimilarities (den)
+  DATA_MATRIX(X);   // environmental predictors (n_samples x n_env)
+  DATA_MATRIX(W);   // predictors on sigma
+  DATA_IMATRIX(D);   // mapping of sample pairs
+  DATA_SPARSE_MATRIX(Z);  // other random effects
   DATA_INTEGER(has_sample_re);  // flag for re (sample-level)
-  DATA_INTEGER(has_random);     // flag for re (other)
-  DATA_INTEGER(family);         // family (0 = normal, 1 = binomial, 2 = beta)
-  DATA_INTEGER(link);           // link function (0 = identity, 1 = neg_exp, 2 = neg_gaus)
-  DATA_INTEGER(constraint);     // flag for constraint (0 = no constraint, 1 = constraint on beta, 2 = constraint on site re)
-  DATA_IVECTOR(map_re);         // mapping from RE columns
-  DATA_INTEGER(n_lv);           // n latent dimensions
+  DATA_INTEGER(has_random);   // flag for re (other)
+  DATA_INTEGER(family);    // family (0 = normal, 1 = binomial, 2 = beta), 3 = betabinomial)
+  DATA_INTEGER(link);    // link (0 = identity, 1 = neg_exp, 2 = neg_gaus)
+  DATA_INTEGER(constraint);  // flag for constraint (0 = none, 1 = lambda, 2 = site re)
+  DATA_IVECTOR(map_re);  // mapping of RE columns to vars
+  DATA_INTEGER(n_lv);    // n latent dimensions (k)
 
   // Parameters
-//  PARAMETER(log_alpha);                   // Scale parameter
-  PARAMETER_VECTOR(lambda_diag);          // lambda diagonal(env. loadings)
-  PARAMETER_VECTOR(lambda_upper);         // lambda, upper triangle
-  PARAMETER_VECTOR(lambda_lower);         // lambda, lower triangle
-  PARAMETER_MATRIX(u_sample);            // U (sample error)
-  PARAMETER(log_scale);                  // Scale parameter
-  PARAMETER_VECTOR(beta);              // effects on sigma
-  PARAMETER_MATRIX(u);                  // additional random effects ()intercepts)
-  PARAMETER_VECTOR(log_sigma_re);       // log of SD for each RE term
+  PARAMETER_MATRIX(lambda);  // env. loadings
+  PARAMETER_MATRIX(u_sample);   // U (sample-level error)
+  PARAMETER(log_scale);     // Scale parameter (dispersion)
+  PARAMETER_VECTOR(beta);   // effects on sigma (dispersion)
+  PARAMETER_MATRIX(u);  // additional random effects (standardised)
+  PARAMETER_VECTOR(log_sigma_re);  // vector of SD for each RE term
 
   // Derived variables
-  int n_pairs = Y.size();               // number of pairs (dissimilarities)
-  int n_samples = X.rows();             // number of samples (dissimilarities)
-  int n_env = X.cols();                 // number of env. variables
-  vector<Type> sigma_re = exp(log_sigma_re);
-//  Type alpha = exp(log_alpha);
+  int n_pairs = Y.size();   // number of pairs (dissimilarities)
+  int n_samples = X.rows();  // number of samples (dissimilarities)
+  int n_env = X.cols();     // number of env. variables
 
-  Type SD = 0;                          // SD of Gaussian family
-  Type phi = 0;                         // phi of beta (and beta binomial) distribution        //
-
-  // ---------- 2. LOADINGS AND CONSTRAINS ---------
-
-  // CONSTRUCT LAMBDA MATRIX (environmental loadings)
-  matrix<Type> lambda(n_env, n_lv);
-  lambda.setZero();
-
-  // Diagonal
-  int dim_lambda = (n_env < n_lv) ? n_env : n_lv;
-  for(int i = 0; i < dim_lambda; i++){
-    if(constraint == 1){
-      lambda(i, i) = exp(lambda_diag(i));
-    } else {
-      lambda(i, i) = lambda_diag(i);
-    }
-  }
-
-  // Lower
-  int idx = 0;
-
-  for(int j = 0; j < n_lv; j++){         // Outer loop: Columns
-    for(int i = 0; i < n_env; i++){      // Inner loop: Rows
-      if(i > j){
-        lambda(i, j) = lambda_lower(idx++);
-      }
-    }
-  }
-
-  // Upper
-  if (constraint != 1) {
-    idx = 0;
-    for(int j = 0; j < n_lv; j++){       // Outer loop: Columns
-      for(int i = 0; i < n_env; i++){    // Inner loop: Rows
-        if(i < j){
-          lambda(i, j) = lambda_upper(idx++);
-        }
-      }
-    }
-  }
+  vector<Type> sigma_re = exp(log_sigma_re); // sigma of sample error
+  Type SD = 0;     // SD of Gaussian family (pair error)
+  Type phi = 0;    // phi of beta (and beta binomial) distribution (pair error)
 
 
-  // ---------- 3. LATENT (COM)POSITIONS ---------
-  matrix<Type> L_m = X * lambda;         // expected position
-  matrix<Type> L = L_m + u_sample;     // sample-level error
-  if (has_random && u.size() > 0) {    // additional random effects
+  // ---------- 3. LATENT COMPOSITIONS ---------
+  matrix<Type> L_m = X * lambda;
+  matrix<Type> L = L_m;
+  L += u_sample;
+  if (has_random && u.size() > 0) {   // include other random effects
     L += Z * u;
   }
 
-  // SD sample-level error (distributional model)
+  //  SD model
   vector<Type> l_sample_sd = W * beta.matrix();
 
-  // initiate negative log-likelihood
+  // U likelihood contr. to likelihood
   Type nll = 0.0;
-
-  // Sample-level error contribution to nll
   if (has_sample_re) {
     for (int i = 0; i < n_samples; i++) {
       Type sample_sd_i = exp(l_sample_sd(i));
       for (int j = 0; j < n_lv; j++) {
-        // Skip upper triangle when constraint == 2
-        if (constraint == 2 && j > i) continue;
+        if (constraint == 2 && j > i) continue;  // Skip upper triangle if constraint == 2
         nll -= dnorm(u_sample(i, j), Type(0), sample_sd_i, true);
-      }
-    }
-  }
+  }}}
 
-  // Other random effect contribution to nll
+  // Other random effects: contribution to NLL
   if (has_random) {
     for (int i = 0; i < u.rows(); i++) {
       for (int k = 0; k < n_lv; k++) {
         nll -= dnorm(u(i, k), Type(0), sigma_re(map_re[i]), true);
-      }
-    }
-  }
+  }}}
 
-  // ---------- 4. COMPUTE PAIRWISE DISTANCES AND LIKELIHOOD OF DISSIMILARITIES ---------
 
-  // Distribution-specific scale parameters (if any)
+  // Distribution-specific scale parameters
   if (family == 0) {
-    SD = exp(log_scale); // SD for gaussian
+    SD = exp(log_scale);
   } else if (family == 2 || family == 3) {
-    phi = exp(log_scale); // phi for beta
+    phi = exp(log_scale);
   }
 
-  // for each pair of sites
+  //----------PAIRWISE LOOP (START)----------
+  vector<Type> mu_vec(n_pairs);
   for (int i = 0; i < n_pairs; i++) {
 
-    int s1 = CppAD::Integer(D(i, 0));
-    int s2 = CppAD::Integer(D(i, 1));
+    // Select two samples
+    int s1 = D(i, 0);
+    int s2 = D(i, 1);
 
-    // Calculate (squared) Euclidean distance between latent positions (L)
+    // Calculate Euclidean distances
     Type dist_2 = 0.0;
     for(int k = 0; k < n_lv; k++) {
       Type diff = L(s1, k) - L(s2, k);
       dist_2 += diff * diff;
     }
 
-    Type dist = sqrt(dist_2 + 1e-10); // adding + 1e-10 to avid crash if points have same latnet position
+    Type dist = sqrt(dist_2 + 1e-10);
 
-    // Apply inverse link
+    // Inverse link
     Type mu;
     switch (link) {
     case 1:
       mu = Type(1) - exp(-(dist));
       break;
     case 2:
-      mu = Type(1) - exp(-(dist_2));  // nugget on squared distance scale
+      mu = Type(1) - exp(-(dist_2));
       break;
     default:
       mu = dist;
     break;
     }
 
-    // likelihood
-    switch (family) {
+    // for stability
+    if (family == 1 || family == 2 || family == 3) {
+      if (mu < Type(1e-14)) mu = Type(1e-14);
+      if (mu > Type(1.0 - 1e-14)) mu = Type(1.0 - 1e-14);
+    }
+    mu_vec(i) = mu;
+  }
+
+  //---------- END PAIRWISE LOOP ----------
+
+  // likelihood
+  switch (family) {
     case 0: // Gaussian
-      nll -= dnorm(Y(i), mu, SD, true);
+      nll -= sum(dnorm(Y, mu_vec, SD, true));
       break;
     case 1: // Binomial
-      nll -= dbinom(Y(i), Y_den(i), mu, true);
+      nll -= sum(dbinom(Y, Y_den, mu_vec, true));
       break;
     case 2: { // Beta
-        Type a = mu * phi;
-        Type b = (Type(1) - mu) * phi;
-        nll -= dbeta(Y(i), a, b, true);
+        vector<Type> a = mu_vec * phi;
+        vector<Type> b = (Type(1.0) - mu_vec) * phi;
+        nll -= sum(dbeta(Y, a, b, true));
         break;
       }
     case 3: { // Beta-Binomial
-      Type a = mu * phi;
-      Type b = (Type(1) - mu) * phi;
-      Type log_lik =
-        lgamma(Y_den(i) + Type(1)) - lgamma(Y(i) + Type(1)) - lgamma(Y_den(i) - Y(i) + Type(1))
-        + lgamma(Y(i) + a) + lgamma(Y_den(i) - Y(i) + b) - lgamma(Y_den(i) + a + b)
+      for(int i = 0; i < n_pairs; i++) {
+      Type a = mu_vec(i) * phi;
+      Type b = (Type(1.0) - mu_vec(i)) * phi;
+      nll -= lgamma(Y(i) + a) + lgamma(Y_den(i) - Y(i) + b) - lgamma(Y_den(i) + a + b)
         - lgamma(a) - lgamma(b) + lgamma(a + b);
-        nll -= log_lik;
-        break;
-     }
     }
-  }
+      break;
+  }}
 
-  // Calculate mod of lambda (total effect)
-  vector<Type> lambda_mod(n_env);  // vector of magnitudes
+  // Derived quantities:
+  vector<Type> lambda_mod(n_env); // total env. effects
   for(int i = 0; i < n_env; i++){
-    lambda_mod(i) = sqrt((lambda.row(i) * lambda.row(i).transpose()).sum());
+    lambda_mod(i) = sqrt(lambda.row(i).array().square().sum());
   }
 
-  // Report intermediate variables
-  // REPORT(alpha);
-  REPORT(lambda);                            // environmental loadings
+  REPORT(lambda);
   REPORT(lambda_mod);
-  REPORT(beta);                              // Effects on dispersion (SD of sample-level error)
-  REPORT(sigma_re);                          // SD of other random effects
-  REPORT(L);                                 // Site loadings (conditional) for plot
-  REPORT(L_m);                               // Site loadings (marginal) for plot
+  REPORT(beta);
+  REPORT(sigma_re);
+  REPORT(L);
+  REPORT(L_m);
 
+  if (has_sample_re) REPORT(u_sample);
 
-  if (has_sample_re) REPORT(u_sample);       // U: Sample-level error loadings
-
-  // report SE
-  ADREPORT(lambda);                        // B: Env. loadings
-  ADREPORT(lambda_mod);
-  ADREPORT(beta);                          // Effects on dispersion (SD sample error)
-  ADREPORT(sigma_re);                      // SD of other random effects
-
+  ADREPORT(lambda);
+  ADREPORT(beta);
+  ADREPORT(sigma_re);
   if (family == 0) ADREPORT(SD);
   if (family == 2 || family == 3) ADREPORT(phi);
 
