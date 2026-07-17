@@ -271,7 +271,6 @@ rrGDM <- function(Y,
   }
 
   obj$fn(best_fit$par) # update objective
-
   # SD report
   sd_rep <- NULL
 
@@ -331,7 +330,6 @@ include_se <- function(obj, ...) {
   obj$sd_rep <- sd_rep
   return(obj)
 }
-
 
 
 
