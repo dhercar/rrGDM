@@ -145,7 +145,7 @@ predict.rrGDM <- function(object,
         beta <- sim_i[names(sim_i) == 'beta']
         tau <- exp(W_design %*% beta)
         L <- X_design %*% lambda
-        if (site_error)  { # Include site level error (dispersion)? otherwise param uncertainty only
+        if (sim_site)  { # Include site level error (dispersion)? otherwise param uncertainty only
           L = L  + matrix(rnorm(nrow(X_design) * object$k, 0, rep(tau, object$k)), ncol = object$k)
         }
         data.frame(draw = x, L = L)
@@ -186,7 +186,7 @@ predict.rrGDM <- function(object,
   } else {
     if (conditional == TRUE) {
      L <- object$obj$report()$L
-    } else (conditional == FALSE) {
+    } else if (conditional == FALSE) {
      L <- X_design %*% object$obj$report()$lambda
     }
       if (ordination == TRUE) {
