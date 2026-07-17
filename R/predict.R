@@ -50,7 +50,7 @@ predict.rrGDM <- function(object,
   # -------------------- BASIC CHECKS ---------------------------------
 
   # Conditional predictions only available for fitted data
-  if ((conditional == FALSE) && !is.null(X_new)) {
+  if ((conditional == TRUE) && !is.null(X_new)) {
     cli::cli_abort(c(
       "x" = "{.arg conditional = TRUE} is currently only available for the samples used to fit the model.",
       "*" = "Set {.arg X_new = NULL} to get conditional predictions for the fitted samples.",
