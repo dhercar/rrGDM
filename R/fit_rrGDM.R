@@ -40,7 +40,7 @@ rrGDM <- function(Y,
                   seed = NULL,
                   init_jitter = 0.001,
                   n_starts = 10,
-                  init_method = 'PCOA',
+                  init_method = 'dbRDA',
                   trace = FALSE,
                   control = list()) {
 

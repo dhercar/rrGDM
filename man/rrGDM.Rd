@@ -17,10 +17,11 @@ rrGDM(
   link = NULL,
   se = TRUE,
   sample_error = TRUE,
-  constraint = 1,
+  constraint = 2,
   trans = function(x) x,
   seed = NULL,
   init_jitter = 0.01,
+  find_initials = "PCOA",
   trace = FALSE,
   control = list()
 )
@@ -57,6 +58,8 @@ rrGDM(
 \item{seed}{An integer specifying the seed for random number generation. Default is NULL.}
 
 \item{init_jitter}{Numeric. A small standard deviation used to jitter initial parameter values.}
+
+\item{find_initials}{A character string specifying a method used to obtain initial values for optimisation. Currently, only \code{find_initials = 'PCOA'} available.}
 
 \item{control}{A list of control parameters passed to stats::nlminb}
 }
