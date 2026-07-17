@@ -48,7 +48,6 @@ prepare_data <- function(formula = NULL,
 
   if (is.null(formula) || is.null(data)) {
     X_design      <- integer(0)
-    W_design      <- integer(0)
     fixed_formula <- ~0
 
   } else {
@@ -79,7 +78,9 @@ prepare_data <- function(formula = NULL,
     contrasts_fix <- attr(X_tmp, "contrasts")
 
     # --- DISPERSION MODEL ---
-    if (!is.null(lme4::findbars(formula_sd))) {
+    if (is.null(data)) {
+      W_design <- integer(0)
+    } else if (!is.null(lme4::findbars(formula_sd))) {
       cli::cli_abort(c("Random effects not allowed in dispersion model",
                        "x" = "Check {.var formula_sd}: random effects are only supported in the main formula."))
     }
