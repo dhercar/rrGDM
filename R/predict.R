@@ -153,9 +153,9 @@ predict.rrGDM <- function(object,
 
     } else if (sample_param == FALSE)  {
       samples <- lapply(1:n_sim, function(x){
-        L <- X_design %*% object$obj$report()$lambda # Point estimate of lambda
+        L <- X_design %*% object$obj$report(object$opt$par)$lambda # Point estimate of lambda
         if (sim_site)  {  # Include site level error (dispersion)? otherwise expected value
-          tau <- exp(W_design %*% object$obj$report()$beta)
+          tau <- exp(W_design %*% object$obj$report(object$opt$par)$beta)
           L = L  + matrix(rnorm(nrow(X_design) * object$k, 0, rep(tau, object$k)), ncol = object$k)
         }
         data.frame(draw = x, L = L)
@@ -185,9 +185,9 @@ predict.rrGDM <- function(object,
 
   } else {
     if (conditional == TRUE) {
-     L <- object$obj$report()$L
+     L <- object$obj$report(object$opt$par)$L
     } else if (conditional == FALSE) {
-     L <- X_design %*% object$obj$report()$lambda
+     L <- X_design %*% object$obj$report(object$opt$par)$lambda
     }
       if (ordination == TRUE) {
         predict_ord <- data.frame(L = L, sample = 1:nrow(X_new), X_new)
