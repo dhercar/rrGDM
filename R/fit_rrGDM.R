@@ -45,9 +45,11 @@ rrGDM <- function(Y,
                   control = list()) {
 
   if (!is.null(seed)) set.seed(seed)
-
   if (!(constraint %in% c(0,1,2))) cli::cli_warn("Identifiable constraint should be set to either 0, 1, or 2")
-
+  if (!is.null(scale_diss) && !(family %in% c('binomial','beta.binomial'))) {
+    cli::cli_warn("Ignoring scale_diss for binomial and beta-binomial families ")
+    scale_diss <- NULL
+  }
   # ToDo: CHECKS
   # - Y has no NA
   # - X has no NA
@@ -108,8 +110,8 @@ rrGDM <- function(Y,
   n_samples <- nrow(Y)
 
   # Check constraints
-  if (constraint == 0) cli::cli_warn("No identifiability constraint. Consider using contraint == 1, or constraint == 2")
-  if ((constraint == 1) && !is.matrix(data_design$X_design)) cli::cli_abort('Predictors should be provided if constraint = 1')
+  if (constraint == 0) cli::cli_warn("No identifiability constraint. Consider using constraint == 1, or constraint == 2")
+  if ((constraint == 1) && ncol(data_design$X_design) == 0) cli::cli_abort('Predictors should be provided if constraint = 1')
   if (constraint == 1 && k > n_env) cli::cli_warn("k is larger than the number of predictors. This may cause problems. Consider 'constraint == 2'")
   if ((constraint == 2) && !sample_error) cli::cli_abort('sample_error needs to be set to TRUE if constraint = 2')
   if ((constraint == 2) && k > n_samples) cli::cli_abort(paste0("k (", k, ") cannot be larger than the number of samples (", n_samples, ")."))
@@ -151,7 +153,7 @@ rrGDM <- function(Y,
 
     use_X <- (init_method == 'dbRDA') && (n_env > 0)
 
-    loadings <- rrGDM:::initial_loadings(
+    loadings <- initial_loadings(
       trans(Y),
       X_design  = if (use_X) data_design$X_design else NULL,
       dist_method = dist_method,
@@ -308,7 +310,8 @@ rrGDM <- function(Y,
     xlevels_sd = data_design$xlevels_sd,
     contrasts_fix = data_design$contrasts_fix,
     contrasts_sd = data_design$contrasts_sd,
-    call = match.call()
+    call = match.call(),
+    constraint = constraint
   )
 
   class(res) <- "rrGDM"
