@@ -10,10 +10,11 @@
   boot = TRUE,
   sample_param = TRUE,
   n_sim = 1000,
-  site_error = TRUE,
+  sim_site = TRUE,
   ordination = FALSE,
   type = "response",
   probs = c(0.025, 0.5, 0.975),
+  conditional = FALSE,
   ...
 )
 }
@@ -30,7 +31,7 @@ If \code{NULL}, predictions are made for the original data used in model fitting
 
 \item{n_sim}{Integer specifying the number of simulation draws. Defaults to 1000.}
 
-\item{site_error}{Logical. Should site-level random variation
+\item{sim_site}{Logical. Should site-level random variation
 be included in the predictions? Defaults to \code{TRUE}.}
 
 \item{ordination}{Logical. If \code{TRUE}, returns coordinates in the latent

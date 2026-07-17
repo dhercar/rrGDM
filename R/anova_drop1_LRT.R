@@ -1,150 +1,216 @@
-#' Likelihood Ratio Test for rrGDM Models
+#' Wald Tests for Environmental Loadings and Dispersion Effects
 #'
 #' @description
-#' Compares two fitted `rrGDM` models using a likelihood ratio test (LRT).
-#' The LRT is useful to compare nested models to assess the significance of one or more predictors.
+# 'Wald tests for sets of predictor effects in a fitted \code{rrGDM} model:
+#' \itemize{
+#'   \item \strong{Environmental loadings} (\code{lambda}): for each
+#'     predictor, a multivariate (multi-df) Wald test of the null that all
+#'     \code{k} loadings of that predictor (one per latent dimension) are
+#'     jointly zero. This accounts for the covariance between loadings
+#'     within a predictor, which can be substantial due to rotational
+#'     invariance.
+#'   \item \strong{Dispersion effects} (\code{beta}): for each predictor in
+#'     the dispersion model, a univariate Wald z-test, since each
+#'     coefficient is a scalar effect on \eqn{\log(\tau_i)}.
+#' }
 #'
-#' @param object  A fitted model of class `rrGDM`. **Should be the fuller
-#'   (more parameters) model**.
-#' @param object2 A fitted model of class `rrGDM`. Should be the reduced
-#'   (fewer parameters).
-#' @param ... Currently unused.
+#' @param object A fitted model of class \code{rrGDM}, fitted with
+#'   \code{se = TRUE}.
+#' @param include_intercept Logical. Should the intercept term of
+#'   \code{formula_sd} be included in the \code{beta} output? Default is
+#'   \code{FALSE}.
 #'
 #' @details
-#' The function does **not** verify that the models are truly nested. A
-#' warning is issued when the models have equal numbers of parameters, but
-#' no structural check is performed.
+#' This test is preferred over testing each latent dimension separately
+#' (e.g., with per-dimension p-values corrected for multiple comparisons),
+#' because it explicitly accounts for the covariance between loadings
+#' within a predictor rather than discarding it. If
+#' \eqn{\boldsymbol{\Sigma}_i} is computationally singular (which can occur
+#' under strong collinearity between latent dimensions for a given
+#' predictor), a Moore-Penrose pseudoinverse is used instead, with a warning.
 #'
 #' @return
-#' A `data.frame` with one row per model.
-#'
-#' @seealso [drop1.rrGDM()] for sequential single-term deletion tests.
+#' A list of class \code{wald_rrGDM} with two elements:
+#' \itemize{
+#'   \item \code{lambda}: a \code{data.frame} with one row per predictor in
+#'     \code{X_design}, with columns \code{term}, \code{Wald}, \code{Df}
+#'     (\code{= k}), \code{Pr_Chisq}, \code{Sig}.
+#'   \item \code{beta}: a \code{data.frame} with one row per predictor in
+#'     \code{W_design} (excluding the intercept unless
+#'     \code{include_intercept = TRUE}), with columns \code{term},
+#'     \code{Estimate}, \code{SE}, \code{z}, \code{Pr_z}, \code{Sig}.
+#' }
 #'
 #' @export
-#' @method drop1 rrGDM
-anova.rrGDM <- function(object, object2, ...) {
-  if (missing(object2)) {
-    cli::cli_abort(
-      "Requires two models to compare."
-    )
+#' @importFrom stats pchisq pnorm
+wald_test <- function(object, include_intercept = FALSE) {
+
+  if (!inherits(object, "rrGDM")) {
+    cli::cli_abort("{.arg object} must be a fitted {.cls rrGDM} model.")
   }
 
-  name_1 <- deparse(substitute(object))
-  name_2 <- deparse(substitute(object2))
-
-  n_par_1 <- length(object$opt$par)
-  n_par_2 <- length(object2$opt$par)
-
-
-  if (n_par_1 < n_par_2) {
-    cli::cli_warn(c(
-      "!" = "First model has fewer parameters than the second.",
-      "i" = "Convention is to pass the fuller model first: {.code anova(full_model, reduced_model)}."
+  if (is.null(object$sd_rep)) {
+    cli::cli_abort(c(
+      "x" = "{.arg object} has no {.field sd_rep}.",
+      "i" = "Refit the model with {.code se = TRUE}, or run {.fn include_se} on the fitted object."
     ))
   }
 
-  nll_1   <- object$opt$objective
-  nll_2   <- object2$opt$objective
-  lrt     <- 2 * (nll_2 - nll_1)
-  ll_dif  <- nll_2 - nll_1
-  df_diff <- n_par_1 - n_par_2             # negative when order reversed
+  sd_rep <- object$sd_rep
+  sdr_vals <- sd_rep$value
+  sdr_cov  <- sd_rep$cov
 
-  if (lrt < -1e-6) {
-    cli::cli_warn(c(
-      "!" = "LRT statistic is negative ({round(lrt, 4)})",
-      "i" = "The models supplied may ve in the wrong order, or may not have converged."
+  # LOADINGS (lambda)
+
+  n_env <- ncol(object$X_design)
+
+  if (is.null(n_env) || n_env == 0) {
+    cli::cli_abort(c(
+      "x" = "The model contains no predictors in {.field X_design}.",
+      "i" = "{.fn wald_test} requires at least one predictor with an estimated loading."
     ))
   }
 
-  p_val <- pchisq(lrt, df = abs(df_diff), lower.tail = FALSE)
+  k       <- object$k
+  env_nms <- colnames(object$X_design)
 
-  res <- data.frame(
-    Model    = c(name_1, name_2),
-    n_par    = c(n_par_1, n_par_2),
-    nll      = round(c(nll_1, nll_2), 2),
-    Df       = c(NA, df_diff),
-    ll_dif   = round(c(NA, ll_dif), 3),
-    LRT      = round(c(NA, max(0, lrt)), 3),
-    Pr_Chisq = c(NA, p_val)
-  )
+  lam_idx <- which(names(sdr_vals) == "lambda")
 
-  return(res)
-}
+  if (length(lam_idx) != n_env * k) {
+    cli::cli_abort(c(
+      "x" = "Could not locate the expected number of {.field lambda} entries in {.field sd_rep}.",
+      "i" = "Expected {n_env * k}, found {length(lam_idx)}.",
+      "!" = "This may indicate a mismatch between the fitted model and {.arg object}."
+    ))
+  }
 
+  lambda_hat <- matrix(sdr_vals[lam_idx], nrow = n_env, ncol = k)
+  Sigma_full <- sdr_cov[lam_idx, lam_idx, drop = FALSE]
 
-#' Drop-One Likelihood Ratio Tests for Fixed Effects in an rrGDM Model
-#'
-#' @description
-#' Performs sequential single-term deletion tests for all fixed-effect terms
-#' in a fitted `rrGDM` model. Each term is removed in turn, the model is
-#' refitted, and the change in fit is assessed via [anova.rrGDM()].
-#'
-#' @param object A fitted model of class `rrGDM`. The full model from which
-#'   terms will be dropped one at a time.
-#' @param ... Currently unused.
-#'
-#' @details
-#'
-#' If a reduced model fails to converge or generates errors during fitting, a warning
-#' is issued for that term and a row of `NA` values is returned in its place.
-#'
-#' @return
-#' A `data.frame` with one row per fixed-effect term.
-#'
-#' @seealso [anova.rrGDM()] for a direct two-model comparison.
-#'
-#' @export
-#' @method drop1 rrGDM
-drop1.rrGDM <- function(object, ...) {
-  fix_terms     <- attr(terms(object$formula_fix, data = object$data_frame), "term.labels")
-  original_call <- object$call
+  report_lambda <- tryCatch(object$obj$report(object$opt$par)$lambda, error = function(e) NULL)
+  if (!is.null(report_lambda) &&
+      all(dim(report_lambda) == dim(lambda_hat)) &&
+      !isTRUE(all.equal(unname(lambda_hat), unname(report_lambda), tolerance = 1e-6))) {
+    cli::cli_warn(c(
+      "!" = "ADREPORT-derived {.field lambda} does not match {.code object$obj$report()$lambda}.",
+      "i" = "Results may be misaligned; proceed with caution."
+    ))
+  }
 
-  caller_env <- parent.frame()
+  singular_terms <- character(0)
 
-  cli::cli_h2("Drop-1 LRT for Fixed Effects")
-  cli::cli_inform("Testing {.val {length(fix_terms)}} term{?s}...")
+  lambda_res <- lapply(seq_len(n_env), function(i) {
+    idx_i   <- i + (0:(k - 1)) * n_env
+    lam_i   <- lambda_hat[i, ]
+    Sigma_i <- Sigma_full[idx_i, idx_i, drop = FALSE]
 
-  results <- lapply(fix_terms, function(term) {
-    cli::cli_inform("Testing deletion of term: {.val {term}}")
-
-    new_formula      <- update.formula(object$formula, as.formula(paste("~ . -", term)))
-    new_call         <- original_call
-    new_call$formula <- new_formula
-
-    fit_red <- try(eval(new_call, envir = caller_env), silent = FALSE)
-
-    if (inherits(fit_red, "try-error")) {
-      cli::cli_warn("Model failed to converge without {.val {term}}.")
-      return(data.frame(
-        Term = term, nll = NA, ll_dif = NA,
-        LRT = NA, Df = NA, Pr_Chisq = NA
-      ))
-    }
-
-    # object is always the full model; fit_red is always reduced.
-    # Suppress the expected "fewer parameters" warning from anova.rrGDM.
-    # Index by position rather than model name since names now vary.
-    lrt_res <- suppressWarnings(anova(object, fit_red))
-    red_row <- lrt_res[2, ]
-
-    data.frame(
-      Term     = term,
-      nll      = red_row$nll,
-      ll_dif   = red_row$ll_dif,
-      LRT      = red_row$LRT,
-      Df       = red_row$Df,
-      Pr_Chisq = red_row$Pr_Chisq
+    Sigma_inv <- tryCatch(
+      solve(Sigma_i),
+      error = function(e) {
+        singular_terms <<- c(singular_terms, env_nms[i])
+        MASS::ginv(Sigma_i)
+      }
     )
+
+    W  <- as.numeric(t(lam_i) %*% Sigma_inv %*% lam_i)
+    pv <- stats::pchisq(W, df = k, lower.tail = FALSE)
+
+    data.frame(term = env_nms[i], Wald = W, Df = k, Pr_Chisq = pv,
+               stringsAsFactors = FALSE)
   })
 
-  res_df <- do.call(rbind, results)
-  res_df$Sig <- cut(
-    res_df$Pr_Chisq,
+  lambda_df <- do.call(rbind, lambda_res)
+
+  if (length(singular_terms) > 0) {
+    cli::cli_warn(c(
+      "!" = "Covariance matrix was computationally singular for loading term{?s}: {.val {singular_terms}}.",
+      "i" = "A Moore-Penrose pseudoinverse was used instead; interpret {.field Wald}/{.field Pr_Chisq} for {?this/these} term{?s} with caution."
+    ))
+  }
+
+  lambda_df$Sig <- cut(
+    lambda_df$Pr_Chisq,
     breaks = c(-Inf, 0.001, 0.01, 0.05, 0.1, Inf),
     labels = c("***", "**", "*", ".", " ")
   )
+  rownames(lambda_df) <- NULL
 
-  cli::cli_h2("Single Term Deletions (LRT)")
+  #  DISPERSION (beta)
 
-  return(res_df)
+  w_nms <- colnames(object$W_design)
+
+  if (is.null(w_nms) || length(w_nms) == 0) {
+    cli::cli_abort("The model contains no terms in {.field W_design}.")
+  }
+
+  beta_idx <- which(names(sdr_vals) == "beta")
+
+  if (length(beta_idx) != length(w_nms)) {
+    cli::cli_abort(c(
+      "x" = "Could not locate the expected number of {.field beta} entries in {.field sd_rep}.",
+      "i" = "Expected {length(w_nms)}, found {length(beta_idx)}.",
+      "!" = "This may indicate a mismatch between the fitted model and {.arg object}."
+    ))
+  }
+
+  beta_hat <- sdr_vals[beta_idx]
+  se_hat   <- sqrt(diag(sdr_cov[beta_idx, beta_idx, drop = FALSE]))
+
+  # Sanity check alignment against obj$report()$beta, evaluated explicitly
+  # at the fitted parameters (object$opt$par) -- see note above re: obj's
+  # mutable internal state.
+  report_beta <- tryCatch(object$obj$report(object$opt$par)$beta, error = function(e) NULL)
+  if (!is.null(report_beta) && length(report_beta) == length(beta_hat) &&
+      !isTRUE(all.equal(unname(beta_hat), unname(report_beta), tolerance = 1e-6))) {
+    cli::cli_warn(c(
+      "!" = "ADREPORT-derived {.field beta} does not match {.code object$obj$report()$beta}.",
+      "i" = "Results may be misaligned."
+    ))
+  }
+
+  z    <- beta_hat / se_hat
+  pval <- 2 * stats::pnorm(-abs(z))
+
+  beta_df <- data.frame(
+    term     = w_nms,
+    Estimate = beta_hat,
+    SE       = se_hat,
+    z        = z,
+    Pr_z     = pval,
+    stringsAsFactors = FALSE
+  )
+
+  if (!include_intercept) {
+    beta_df <- beta_df[w_nms != "(Intercept)", , drop = FALSE]
+  }
+
+  beta_df$Sig <- cut(
+    beta_df$Pr_z,
+    breaks = c(-Inf, 0.001, 0.01, 0.05, 0.1, Inf),
+    labels = c("***", "**", "*", ".", " ")
+  )
+  rownames(beta_df) <- NULL
+
+  #  RESULT
+
+  res <- list(lambda = lambda_df, beta = beta_df)
+  class(res) <- "wald_rrGDM"
+  res
 }
+
+#' Print method for wald_rrGDM objects
+#'
+#' @param x An object of class \code{wald_rrGDM}, as returned by
+#'   \code{\link{wald_test}}.
+#' @param ... Currently unused.
+#' @export
+#' @method print wald_rrGDM
+print.wald_rrGDM <- function(x, ...) {
+  cli::cli_h2("Wald tests: environmental loadings")
+  print(x$lambda, row.names = FALSE)
+  cli::cli_h2("Wald tests: dispersion effects")
+  print(x$beta, row.names = FALSE)
+  invisible(x)
+}
+
+
