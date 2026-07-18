@@ -47,4 +47,3 @@ make_inv_link <- function(link) {
          cli::cli_abort("Link {.val {link}} is not supported."))
 }
 
-
