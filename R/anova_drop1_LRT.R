@@ -5,10 +5,10 @@
 #' \itemize{
 #'   \item \strong{Environmental loadings} (\code{lambda}): for each
 #'     predictor, a multivariate (multi-df) Wald test of the null that all
-#'     \code{k} loadings of that predictor (one per latent dimension) are
-#'     jointly zero. This accounts for the covariance between loadings
-#'     within a predictor, which can be substantial due to rotational
-#'     invariance.
+#'     free loadings of that predictor (one per latent dimension it loads
+#'     on) are jointly zero. This accounts for the covariance between
+#'     loadings within a predictor, which can be substantial due to
+#'     rotational invariance.
 #'   \item \strong{Dispersion effects} (\code{beta}): for each predictor in
 #'     the dispersion model, a univariate Wald z-test, since each
 #'     coefficient is a scalar effect on \eqn{\log(\tau_i)}.
@@ -29,12 +29,31 @@
 #' under strong collinearity between latent dimensions for a given
 #' predictor), a Moore-Penrose pseudoinverse is used instead, with a warning.
 #'
+#' The degrees of freedom of the \code{lambda} test depend on
+#' \code{object$constraint}:
+#' \itemize{
+#'   \item Under \code{constraint == 1}, the loadings matrix is constrained
+#'     to be lower triangular: predictor (row) \code{i} only has free
+#'     loadings in latent dimensions \code{1:min(i, k)}, the remainder being
+#'     structural zeros that are fixed (not estimated) when the model is
+#'     fit. The Wald test for predictor \code{i} therefore uses
+#'     \code{Df = min(i, k)}, and only the free loadings (and their
+#'     covariance sub-block) enter the test statistic.
+#'   \item Under \code{constraint \%in\% c(0, 2)}, \code{lambda} is
+#'     unconstrained, so every predictor is tested with \code{Df = k}.
+#'     Note that under \code{constraint == 0} the model is not identified
+#'     under rotation of the latent space, so individual loadings (and therefore this test)
+#'     should be interpreted with caution.
+#' }
+#'
 #' @return
 #' A list of class \code{wald_rrGDM} with two elements:
 #' \itemize{
 #'   \item \code{lambda}: a \code{data.frame} with one row per predictor in
 #'     \code{X_design}, with columns \code{term}, \code{Wald}, \code{Df}
-#'     (\code{= k}), \code{Pr_Chisq}, \code{Sig}.
+#'     (see Details -- \code{k} under \code{constraint \%in\% c(0, 2)},
+#'     \code{min(i, k)} for predictor \code{i} under \code{constraint == 1}),
+#'     \code{Pr_Chisq}, \code{Sig}.
 #'   \item \code{beta}: a \code{data.frame} with one row per predictor in
 #'     \code{W_design} (excluding the intercept unless
 #'     \code{include_intercept = TRUE}), with columns \code{term},
@@ -56,6 +75,16 @@ wald_test <- function(object, include_intercept = FALSE) {
     ))
   }
 
+  if (is.null(object$constraint)) {
+    cli::cli_abort(c(
+      "x" = "{.arg object} has no {.field constraint} recorded.",
+      "i" = "Refit the model with the current version of {.fn rrGDM}, which stores {.field constraint} on the fitted object.",
+      "i" = "The degrees of freedom for the {.field lambda} Wald test depend on which identifiability constraint was used."
+    ))
+  }
+
+  constraint <- object$constraint
+
   sd_rep <- object$sd_rep
   sdr_vals <- sd_rep$value
   sdr_cov  <- sd_rep$cov
@@ -71,7 +100,7 @@ wald_test <- function(object, include_intercept = FALSE) {
     ))
   }
 
-  k       <- object$k
+  k  <- object$k
   env_nms <- colnames(object$X_design)
 
   lam_idx <- which(names(sdr_vals) == "lambda")
@@ -97,11 +126,35 @@ wald_test <- function(object, include_intercept = FALSE) {
     ))
   }
 
+  if (constraint == 0) {
+    cli::cli_warn(c(
+      "!" = "Model was fit with {.code constraint = 0} (no identifiability constraint).",
+      "i" = "Individual loadings in {.field lambda} are not identified under rotation of the latent space; interpret per-predictor Wald tests with caution."
+    ))
+  }
+
+  # excluded from both the test statistic and its degrees of freedom.
+  get_free_dims <- function(i) {
+    if (constraint == 1) seq_len(min(i, k)) else seq_len(k)
+  }
+
   singular_terms <- character(0)
 
   lambda_res <- lapply(seq_len(n_env), function(i) {
-    idx_i   <- i + (0:(k - 1)) * n_env
-    lam_i   <- lambda_hat[i, ]
+    fd <- get_free_dims(i)
+    zd <- setdiff(seq_len(k), fd)  # dimensions expected to be structural zeros for this predictor
+
+    if (length(zd) > 0 &&
+        !isTRUE(all.equal(unname(lambda_hat[i, zd]), rep(0, length(zd)), tolerance = 1e-8))) {
+      cli::cli_abort(c(
+        "x" = "Unexpected non-zero loading found where a structural zero was expected for {.val {env_nms[i]}}.",
+        "i" = "This suggests {.field object$constraint} does not match how the model was actually fitted."
+      ))
+    }
+
+    df_i  <- length(fd)
+    idx_i  <- i + (fd - 1) * n_env
+    lam_i  <- lambda_hat[i, fd]
     Sigma_i <- Sigma_full[idx_i, idx_i, drop = FALSE]
 
     Sigma_inv <- tryCatch(
@@ -113,9 +166,9 @@ wald_test <- function(object, include_intercept = FALSE) {
     )
 
     W  <- as.numeric(t(lam_i) %*% Sigma_inv %*% lam_i)
-    pv <- stats::pchisq(W, df = k, lower.tail = FALSE)
+    pv <- stats::pchisq(W, df = df_i, lower.tail = FALSE)
 
-    data.frame(term = env_nms[i], Wald = W, Df = k, Pr_Chisq = pv,
+    data.frame(term = env_nms[i], Wald = W, Df = df_i, Pr_Chisq = pv,
                stringsAsFactors = FALSE)
   })
 
@@ -212,5 +265,3 @@ print.wald_rrGDM <- function(x, ...) {
   print(x$beta, row.names = FALSE)
   invisible(x)
 }
-
-
