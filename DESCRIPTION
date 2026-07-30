@@ -23,3 +23,6 @@ LinkingTo:
   TMB
 URL: https://github.com/dhercar/rrGDM
 BugReports: https://github.com/dhercar/rrGDM/issues
+Suggests: 
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3

@@ -39,7 +39,7 @@ rrGDM <- function(Y,
                   trans = function(x) x,
                   seed = NULL,
                   init_jitter = 0.001,
-                  n_starts = 10,
+                  n_starts = 1,
                   init_method = 'dbRDA',
                   trace = FALSE,
                   control = list()) {
