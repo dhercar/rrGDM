@@ -54,7 +54,7 @@ stress <- function(object,
 
   if (is.null(L_hat)) {
     cli::cli_abort(c(
-      "x" = "Could not retrieve fitted latent coordinates {.field L} from {.arg object}.",
+      "x" = "Could not retrieve fitted latent coordinates {.field L} from {.arg object}."
     ))
   }
 
@@ -70,7 +70,7 @@ stress <- function(object,
 
   if (length(obs_vec) != length(fit_vec)) {
     cli::cli_abort(c(
-      "x" = "Observed and modelled dissimilarity vectors differ in length.",
+      "x" = "Observed and modelled dissimilarity vectors differ in length."
     ))
   }
 
