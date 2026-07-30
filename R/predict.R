@@ -154,11 +154,12 @@ predict.rrGDM <- function(object,
       })
 
     } else if (sample_param == FALSE)  {
-      L <- X_design %*% object$obj$report(object$best_par)$lambda
+      L_base <- X_design %*% object$obj$report(object$best_par)$lambda
       samples <- lapply(1:n_sim, function(x){
-        if (sim_site)  {  # Include site level error (dispersion)? otherwise expected value
+        L <- L_base
+        if (sim_site)  {
           tau <- exp(W_design %*% object$obj$report(object$best_par)$beta)
-          L = L  + matrix(rnorm(nrow(X_design) * object$k, 0, rep(tau, object$k)), ncol = object$k)
+          L <- L + matrix(rnorm(nrow(X_design) * object$k, 0, rep(tau, object$k)), ncol = object$k)
         }
         data.frame(draw = x, L = L)
       })
