@@ -228,7 +228,7 @@ biplot.rrGDM <- function(x,
 
   # ----------------- BASE PLOT --------------------------
   # Empty plot
-  plot_obj <- ggplot2::ggplot(points_rot, ggplot2::aes(x = ggplot2::.data$LV.1, y = ggplot2::.data$LV.2)) +
+  plot_obj <- ggplot2::ggplot(points_rot, ggplot2::aes(x = .data$LV.1, y = .data$LV.2)) +
     ggplot2::coord_equal() +
     ggplot2::xlab(paste0('LV', k[1])) +
     ggplot2::ylab(paste0('LV', k[2]))
@@ -240,15 +240,15 @@ biplot.rrGDM <- function(x,
   if (add_points) {
     if (has_col && has_shape) {
       plot_obj <- plot_obj +
-        ggplot2::geom_point(ggplot2::aes(color = ggplot2::.data[[col_by]], shape = as.factor(ggplot2::.data[[shape_by]]))) +
+        ggplot2::geom_point(ggplot2::aes(color = .data[[col_by]], shape = as.factor(.data[[shape_by]]))) +
         ggplot2::labs(color = col_by, shape = shape_by)
     } else if (has_col) {
       plot_obj <- plot_obj +
-        ggplot2::geom_point(ggplot2::aes(color = ggplot2::.data[[col_by]])) +
+        ggplot2::geom_point(ggplot2::aes(color = .data[[col_by]])) +
         ggplot2::labs(color = col_by)
     } else if (has_shape) {
       plot_obj <- plot_obj +
-        ggplot2::geom_point(ggplot2::aes(shape = ggplot2::.data[[shape_by]])) +
+        ggplot2::geom_point(ggplot2::aes(shape = .data[[shape_by]])) +
         ggplot2::labs(shape = shape_by)
     } else {
       plot_obj <- plot_obj + ggplot2::geom_point()
@@ -269,11 +269,11 @@ biplot.rrGDM <- function(x,
 
       plot_obj <- plot_obj +
         ggplot2::geom_segment(data = loadings_rot,
-                              ggplot2::aes(x = 0, y = 0, xend = ggplot2::.data$LV.1, yend = ggplot2::.data$LV.2),
+                              ggplot2::aes(x = 0, y = 0, xend = .data$LV.1, yend = .data$LV.2),
                               arrow = grid::arrow(angle = 15, length = grid::unit(0.2, 'cm'))) +
         ggplot2::geom_text(data = loadings_rot,
                            size = text_size,
-                           ggplot2::aes(label = ggplot2::.data$var, x = ggplot2::.data$LV.1 * 1.2, y = ggplot2::.data$LV.2 * 1.2))
+                           ggplot2::aes(label = .data$var, x = .data$LV.1 * 1.2, y = .data$LV.2 * 1.2))
     }
   }
 
@@ -321,9 +321,9 @@ biplot.rrGDM <- function(x,
       ggplot2::geom_text(data = sp_load_df,
                          colour = 'red',
                          size = text_size,
-                         ggplot2::aes(label = ggplot2::.data$sp,
-                                      x = ggplot2::.data$LV.1 * sp_load_scale,
-                                      y = ggplot2::.data$LV.2 * sp_load_scale))
+                         ggplot2::aes(label = .data$sp,
+                                      x = .data$LV.1 * sp_load_scale,
+                                      y = .data$LV.2 * sp_load_scale))
   }
 
   # ---------------------------- COND. VS MARG. ----------------------------
@@ -339,10 +339,10 @@ biplot.rrGDM <- function(x,
       plot_obj <- plot_obj +
         ggplot2::geom_point(data = points_m,
                             shape = 21,
-                            ggplot2::aes(x = ggplot2::.data$LV_m.1, y = ggplot2::.data$LV_m.2, fill = 'marginal')) +
+                            ggplot2::aes(x = .data$LV_m.1, y = .data$LV_m.2, fill = 'marginal')) +
         ggplot2::geom_segment(data = points_m,
-                              ggplot2::aes(x = ggplot2::.data$LV.1, y = ggplot2::.data$LV.2,
-                                           xend = ggplot2::.data$LV_m.1, yend = ggplot2::.data$LV_m.2),
+                              ggplot2::aes(x = .data$LV.1, y = .data$LV.2,
+                                           xend = .data$LV_m.1, yend = .data$LV_m.2),
                               colour = 'grey')
     }
   }
