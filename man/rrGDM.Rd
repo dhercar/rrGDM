@@ -52,7 +52,7 @@ rrGDM(
 
 \item{sample_error}{Logical. If TRUE, includes site-level random effects to account for variation not explained by predictors.}
 
-\item{constraint}{Integer. Specifies identifiability constraints. 1: Constraint applied to environmental loadings matrix ($\lambda$); 2: Constraint applied to site random effects matrix (U). Default is 1.}
+\item{constraint}{Integer. Specifies identifiability constraints. 1: Constraint applied to environmental loadings matrix (\eqn{\Lambda}); 2: Constraint applied to site random effects matrix (U). Default is 1.}
 
 \item{trans}{Function used to transform the response matrix before computing dissimilarities (e.g., log, sqrt). Default is no transformation.}
 
