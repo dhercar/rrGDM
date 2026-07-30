@@ -20,7 +20,7 @@
 #' @param control A list of control parameters passed to stats::nlminb
 #' @return An object of class 'rrGDM' containing the fitted model object, the optimized parameters, and other relevant information.
 #' @importFrom TMB MakeADFun sdreport
-#' @importFrom stats nlminb
+#' @importFrom stats nlminb rnorm median sd
 #' @export
 
 rrGDM <- function(Y,
@@ -216,7 +216,7 @@ rrGDM <- function(Y,
     DLL = 'rrGDM',
     random = c('u', 'u_sample'),
     silent = !trace,
-    map = mapping,
+    map = mapping
   )
 
 
