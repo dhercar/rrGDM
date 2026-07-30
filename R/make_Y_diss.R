@@ -18,7 +18,7 @@
 #'   \item Additional columns indicating the dissimilarity between sites. If `num_den = TRUE`, the data frame will contain these individual elements as different columns.
 #' }
 #' @importFrom vegan vegdist designdist
-#' @import cli
+#' @importFrom utils combn
 #' @export
 make_Y_diss <- function(Y_mat = NULL,
                         id = NULL,
