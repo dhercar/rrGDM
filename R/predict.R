@@ -30,7 +30,8 @@
 #'
 #' @method predict rrGDM
 #' @importFrom MASS mvrnorm
-#' @import Matrix cli
+#' @importFrom stats delete.response model.frame model.matrix quantile rnorm na.pass dist
+#' @importFrom utils combn
 #' @export
 #
 predict.rrGDM <- function(object,
@@ -82,13 +83,13 @@ predict.rrGDM <- function(object,
     X_new <- data.frame(X_new)
     tt_fix <- delete.response(object$terms_fix)
 
-    mf_fix <- model.frame(
+    mf_fix <- stats::model.frame(
       tt_fix,
       data = X_new,
       xlev = object$xlevels_fix,
-      na.action = na.pass)
+      na.action = stats::na.pass)
 
-    X_tmp <- model.matrix(
+    X_tmp <- stats::model.matrix(
       tt_fix,
       data = mf_fix,
       contrasts.arg = object$contrasts_fix)
@@ -106,13 +107,13 @@ predict.rrGDM <- function(object,
     # --- DISPERSION MODEL ---
     tt_sd <- delete.response(object$terms_sd)
 
-    mf_sd <- model.frame(
+    mf_sd <- stats::model.frame(
       tt_sd,
       data = X_new,
       xlev = object$xlevels_sd,
-      na.action = na.pass)
+      na.action = stats::na.pass)
 
-    W_design <- model.matrix(
+    W_design <- stats::model.matrix(
       tt_sd,
       data = mf_sd,
       contrasts.arg = object$contrasts_sd)
@@ -171,12 +172,12 @@ predict.rrGDM <- function(object,
 
     } else if (ordination == FALSE) {
       # Compute expected dissimilarities from coordinates
-      comb <- t(combn(nrow(X_new), 2))
+      comb <- t(utils::combn(nrow(X_new), 2))
       colnames(comb) <- c('s1', 's2')
 
       samples_dist <- lapply(samples, function(x){
-        dist <- as.matrix(dist(x[,-1]))
-        inv_link(dist[comb])})
+        dist_mat <- as.matrix(stats::dist(x[,-1]))
+        inv_link(dist_mat[comb])})
 
       # Return dissimilarities (summarised into quantiles)
       samples_dist <- do.call(cbind, samples_dist)
@@ -195,9 +196,9 @@ predict.rrGDM <- function(object,
         return(predict_ord)
 
       } else if (ordination == FALSE) {
-        comb <- t(combn(nrow(X_new), 2))
+        comb <- t(utils::combn(nrow(X_new), 2))
         colnames(comb) <- c('s1', 's2')
-        predict_dis <- data.frame(dist = inv_link(as.matrix(dist(L))[comb]), comb)
+        predict_dis <- data.frame(dist = inv_link(as.matrix(stats::dist(L))[comb]), comb)
         return(predict_dis)
     }
   }
