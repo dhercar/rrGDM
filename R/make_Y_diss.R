@@ -101,7 +101,7 @@ make_Y_diss <- function(Y_mat = NULL,
     Y_mat <- tryCatch({ trans(Y_mat) }, error = function(e) cli::cli_abort("Transformation failed: {e$message}"))
 
     if (check_trans && any(!is.finite(Y_mat))) {
-      cli::cli_warn(c('Non-infinite values created!', 'i' = 'Transformation produced {sum(!is.finite(Y_mat))} non-infinite value{?s}'))
+      cli::cli_warn(c('Non-finite values created!', 'i' = 'Transformation produced {sum(!is.finite(Y_mat))} non-finite value{?s}'))
     }
   }
 
