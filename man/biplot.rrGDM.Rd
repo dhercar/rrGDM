@@ -30,7 +30,8 @@ plot. Default is \code{c(1, 2)}.}
 
 \item{rotate}{Logical indicating whether to apply varimax rotation
 (via \code{\link[stats]{varimax}}) before plotting. Default is
-\code{TRUE}.}
+\code{TRUE}. The result of varimax rotation is that ordination axes are ordered relative to their
+associated importance.}
 
 \item{type}{Character string: either \code{'conditional'} (site scores
 including sample-level error, \code{L}) or \code{'marginal'} (site
@@ -46,9 +47,9 @@ used to colour points. Ignored if \code{add_points = FALSE}.}
 \item{add_points}{Logical indicating whether to add the default sample
 points layer via \code{ggplot2::geom_point()}. Default is \code{TRUE}.
 Set to \code{FALSE} to omit this layer entirely and add a fully custom
-one instead -- the returned plot's default data already contains the
-rotated latent coordinates (\code{LV.1}, \code{LV.2}) together with all
-columns of \code{x$X}, so e.g.
+one instead. The returned plot's default data already contains the
+rotated latent coordinates together with all
+columns used to fit the model, so
 \code{biplot(model, add_points = FALSE) + ggplot2::geom_point(ggplot2::aes(fill = pH), shape = 21)}
 works directly, with more control over aesthetics, shapes, and legends.}
 
@@ -60,13 +61,9 @@ positioned by their (Spearman) correlation with each plotted latent
 axis. Default is \code{FALSE}.}
 
 \item{species_cor_n}{Optional integer. If \code{species_cor = TRUE}, only
-the \code{species_cor_n} species with the strongest correlation
-(largest Euclidean norm of the two plotted-axis correlations) are
-labelled -- useful when the community matrix has hundreds or thousands
-of species, where labelling all of them would be unreadable. Default is
-\code{20}; a warning is issued if there are more species than this,
-noting that \code{species_cor_n} can be increased. Set to \code{NULL}
-to label all species with no cap.}
+the \code{species_cor_n} species with the strongest correlation are
+labelled. Useful when the community matrix has hundreds or thousands
+of species. Default is \code{20}. Set to \code{NULL} to label all species.}
 
 \item{env_load_scale}{Numeric scale factor applied to environmental
 loading arrows. Default is 1.}
@@ -117,15 +114,14 @@ m1 <- rrGDM(Y = com,
 biplot(m1,
        shape_by = 'Region',
        col_by = 'pH',
-       type = 'conditional') +
-  ggplot2::scale_colour_viridis_c()
+       type = 'conditional')
 
-# Fully custom point styling:
+# Custom:
 biplot(m1, add_points = FALSE) +
   ggplot2::geom_point(ggplot2::aes(fill = pH), shape = 21, size = 3) +
   ggplot2::scale_fill_viridis_c()
 
-# Only label the 20 species most strongly correlated with the plotted axes
+# Add species correlation with latent axes
 biplot(m1, species_cor = TRUE, species_cor_n = 20)
 }
 
