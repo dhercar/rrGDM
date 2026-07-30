@@ -32,13 +32,13 @@
 #' }
 #' @noRd
 initial_loadings <- function(Y,
-                             X_design  = NULL,
+                             X_design = NULL,
                              dist_method = "bray",
-                             binary  = FALSE,
-                             k  = 2,
-                             link   = "negexp",
+                             binary = FALSE,
+                             k = 2,
+                             link = "negexp",
                              constraint = 2,
-                             QR  = TRUE) {
+                             QR = TRUE) {
 
   if (constraint == 0) QR <- FALSE
 
@@ -71,13 +71,13 @@ initial_loadings <- function(Y,
   # Cap 1s to avoid crash
   D_linear <- switch(link,
                      negexp  = {
-                       d_max  <- max(D[D < 1], 0)                          # largest non-1 dissimilarity
-                       d_cap  <- max(0.99, d_max + 0.5 * (1 - d_max))      # whichever is larger
+                       d_max <- max(D[D < 1], 0)                          # largest non-1 dissimilarity
+                       d_cap <- max(0.99, d_max + 0.5 * (1 - d_max))      # whichever is larger
                        D_safe <- ifelse(D >= 1, d_cap, D)
                        - log(1 - D_safe)},
                      neggaus = {
-                       d_max  <- max(D[D < 1], 0)
-                       d_cap  <- max(0.99, d_max + 0.5 * (1 - d_max))
+                       d_max <- max(D[D < 1], 0)
+                       d_cap <- max(0.99, d_max + 0.5 * (1 - d_max))
                        D_safe <- ifelse(D >= 1, d_cap, D)
                        sqrt(-log(1 - D_safe))},
                      identity = D,
@@ -111,14 +111,13 @@ initial_loadings <- function(Y,
   # PCOA scores
   U_pcoa <- evec_pos %*% diag(sqrt(eig_pos), nrow = n_pos) # site-level scores
 
-
   # ------------------------------------ RDA ------------------
   if (has_X) {
     X_mat <- as.matrix(X_design)
     qx <- qr(X_mat)
 
     U_fitted <- qr.fitted(qx, U_pcoa)
-    U_resid  <- qr.resid(qx, U_pcoa)
+    U_resid <- qr.resid(qx, U_pcoa)
 
     # Eigendecomposition of the fitted scores
     rda <- eigen(crossprod(U_fitted), symmetric = TRUE)
@@ -144,8 +143,8 @@ initial_loadings <- function(Y,
      rank_r <- min(k, p_lambda) # deals with the case of p < k
 
      qr_decomp <- qr(t(lambda_raw))
-     Q_full    <- qr.Q(qr_decomp, complete = TRUE)
-     R_econ    <- qr.R(qr_decomp)
+     Q_full <- qr.Q(qr_decomp, complete = TRUE)
+     R_econ <- qr.R(qr_decomp)
 
      # If p < lambda, pad R with 0s
      if (k > p_lambda) {
@@ -158,14 +157,14 @@ initial_loadings <- function(Y,
      sign_vec[seq_len(rank_r)] <- sign2(diag(R_econ))
 
      lambda_final <- sweep(t(R_full), 2, sign_vec, "*")
-     u_final      <- sweep(u_raw %*% Q_full, 2, sign_vec, "*")
+     u_final <- sweep(u_raw %*% Q_full, 2, sign_vec, "*")
 
     } else if (constraint == 2) {
       # Rotate u_sample to lower tri, apply rot. to lambda
       # This part does not check dims, assumes n sample > k
       qr_decomp <- qr(t(u_raw))
-      R_mat     <- qr.R(qr_decomp)
-      sign_vec  <- sign2(diag(R_mat))
+      R_mat <- qr.R(qr_decomp)
+      sign_vec <- sign2(diag(R_mat))
 
       u_final <- sweep(t(R_mat), 2, sign_vec, "*")
 
@@ -180,25 +179,23 @@ initial_loadings <- function(Y,
   } else if (QR && k == 1) {
 
     if (constraint == 1) {
-      s            <- sign2(lambda_raw[1, 1])
+      s <- sign2(lambda_raw[1, 1])
       lambda_final <- lambda_raw * s
-      u_final      <- u_raw * s
+      u_final <- u_raw * s
     } else {
-      s            <- sign2(u_raw[1, 1])
-      u_final      <- u_raw * s
+      s <- sign2(u_raw[1, 1])
+      u_final <- u_raw * s
       lambda_final <- if (has_X) lambda_raw * s else NULL
     }
 
   } else {
-    u_final      <- u_raw
+    u_final <- u_raw
     lambda_final <- lambda_raw
   }
-
 
   colnames(u_final) <- paste0("LV", 1:k)
   if (!is.null(lambda_final)) lambda_final <- lambda_final * scale_correction
 
-  list(                                                              # FIX: whole return was missing
-    u_sample    = u_final * scale_correction,
-    lambda_init = lambda_final)
+  list( u_sample = u_final * scale_correction,
+        lambda_init = lambda_final)
 }
