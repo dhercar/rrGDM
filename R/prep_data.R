@@ -5,12 +5,13 @@ prepare_data <- function(formula = NULL,
                          data = NULL,
                          n = NULL) {
 
-  # ---- Input data validation start ----
+  # ---- validate data  ----
   if (is.null(n)) {
     cli::cli_abort(c("{.var n} must be supplied",
                      "x" = "The number of observations is required for design matrix dimensions."))
   }
 
+  # check formulas
   if (!is.null(formula) && !inherits(formula, "formula")) {
     cli::cli_abort("{.var formula} must be a {.cls formula}, not a {.cls {class(formula)}}.")
   }
@@ -23,8 +24,7 @@ prepare_data <- function(formula = NULL,
     if (attr(terms(formula_sd), "intercept") == 0) {
       cli::cli_abort(c(
         "{.var formula_sd} must include an intercept.",
-        "i" = "Dispersion models require a baseline (intercept)",
-        "!" = "Remove {.code 0} or {.code -1} from your {.var formula_sd}."
+        "!" = "Check your {.var formula_sd} and avoid {.code 0} or {.code -1} from your {.var formula_sd}."
       ))
     }
   }
@@ -32,63 +32,66 @@ prepare_data <- function(formula = NULL,
   if (!is.null(data) && !(is.matrix(data) || is.data.frame(data))) {
     cli::cli_abort("{.var data} must be a {.cls matrix} or {.cls data.frame}.")
   }
-  # ---- Input data validation ends ----
+  # ---- end of data validation ----
 
   if (is.null(formula_sd) || is.null(data)) {
     formula_sd  <- ~1
   }
 
   # Initialise terms to NULL
-  fixed_terms   <- NULL
-  sd_terms      <- NULL
-  xlevels_fix   <- NULL
-  xlevels_sd    <- NULL
+  fixed_terms <- NULL
+  sd_terms <- NULL
+  xlevels_fix <- NULL
+  xlevels_sd <- NULL
   contrasts_fix <- NULL
-  contrasts_sd  <- NULL
+  contrasts_sd <- NULL
 
-  if (is.null(formula) || is.null(data)) {
-    X_design      <- integer(0)
+  if (is.null(data)) {
+    X_design <- integer(0)
+    W_design <- integer(0)
     fixed_formula <- ~0
 
   } else {
-    # --- FIXED EFFECTS ---
-    fixed_formula <- lme4::nobars(formula)
 
-    # Standard way to capture data-dependent transformations:
-    # model.frame -> terms(mf) -> model.matrix
-    mf_fix      <- model.frame(fixed_formula, data = data)
-    fixed_terms <- attr(mf_fix, "terms")
-    X_tmp       <- model.matrix(fixed_terms, data = mf_fix)
+    if (is.null(formula)) {
+      X_design <- integer(0)
+      fixed_formula <- ~0
 
-    xlevels_fix <- if (is.data.frame(data)) {
-      lapply(data[sapply(data, is.factor)], levels)
     } else {
-      NULL
-    }
+      # --- FIXED EFFECTS ---
+      fixed_formula <- reformulas::nobars(formula)
+      mf_fix <- model.frame(fixed_formula, data = data)
+      fixed_terms <- attr(mf_fix, "terms")
+      X_tmp <- model.matrix(fixed_terms, data = mf_fix)
 
-    if ("(Intercept)" %in% colnames(X_tmp)) {
-      intercept_idx <- which(colnames(X_tmp) == "(Intercept)")
-      X_design <- X_tmp[, -intercept_idx, drop = FALSE]
-      attr(X_design, "assign") <- attr(X_tmp, "assign")[-intercept_idx]
-      attr(X_design, "contrasts") <- attr(X_tmp, "contrasts")
-    } else {
-      X_design <- X_tmp
-    }
+      xlevels_fix <- if (is.data.frame(data)) {
+        lapply(data[sapply(data, is.factor)], levels)
+      } else {
+        NULL
+      }
 
-    contrasts_fix <- attr(X_tmp, "contrasts")
+      if ("(Intercept)" %in% colnames(X_tmp)) {
+        intercept_idx <- which(colnames(X_tmp) == "(Intercept)")
+        X_design <- X_tmp[, -intercept_idx, drop = FALSE]
+        attr(X_design, "assign") <- attr(X_tmp, "assign")[-intercept_idx]
+        attr(X_design, "contrasts") <- attr(X_tmp, "contrasts")
+      } else {
+        X_design <- X_tmp
+      }
+
+      contrasts_fix <- attr(X_tmp, "contrasts")
+    }
 
     # --- DISPERSION MODEL ---
-    if (is.null(data)) {
-      W_design <- integer(0)
-    } else if (!is.null(lme4::findbars(formula_sd))) {
+    if (!is.null(reformulas::findbars(formula_sd))) {
       cli::cli_abort(c("Random effects not allowed in dispersion model",
                        "x" = "Check {.var formula_sd}: random effects are only supported in the main formula."))
     }
 
     sd_formula <- update(formula_sd, ~ 1 + .)
-    mf_sd      <- model.frame(sd_formula, data = data)
-    sd_terms   <- attr(mf_sd, "terms")
-    W_design   <- model.matrix(sd_terms, data = mf_sd)
+    mf_sd <- model.frame(sd_formula, data = data)
+    sd_terms <- attr(mf_sd, "terms")
+    W_design <- model.matrix(sd_terms, data = mf_sd)
 
     xlevels_sd <- if (is.data.frame(data)) {
       lapply(data[sapply(data, is.factor)], levels)
@@ -100,7 +103,7 @@ prepare_data <- function(formula = NULL,
   }
 
   # Random parts
-  random_parts <- if (!is.null(formula)) lme4::findbars(formula) else NULL
+  random_parts <- if (!is.null(formula)) reformulas::findbars(formula) else NULL
 
   # Return with no re
   if ((length(random_parts) == 0) || is.null(data)) {
@@ -109,24 +112,24 @@ prepare_data <- function(formula = NULL,
     )
 
     return(list(
-      X_design      = X_design,
-      W_design      = W_design,
-      Z_design      = Z_design,
-      map_re        = integer(0),
-      n_re          = 0,
-      n_re_vars     = 0,
-      has_random    = FALSE,
-      formula_fix   = fixed_formula,
-      terms_fix     = fixed_terms,
-      terms_sd      = sd_terms,
-      xlevels_fix   = xlevels_fix,
-      xlevels_sd    = xlevels_sd,
+      X_design = X_design,
+      W_design = W_design,
+      Z_design = Z_design,
+      map_re = integer(0),
+      n_re = 0,
+      n_re_vars = 0,
+      has_random = FALSE,
+      formula_fix = fixed_formula,
+      terms_fix = fixed_terms,
+      terms_sd = sd_terms,
+      xlevels_fix = xlevels_fix,
+      xlevels_sd = xlevels_sd,
       contrasts_fix = contrasts_fix,
       contrasts_sd  = contrasts_sd
     ))
   }
 
-  # Random effects processing (remains same as your original)
+  # Random effects
   Z_list <- list()
   re_vars <- character()
   n_groups_vars <- integer()
@@ -149,7 +152,7 @@ prepare_data <- function(formula = NULL,
       n_groups_vars <- c(n_groups_vars, n_groups)
     } else {
       cli::cli_abort(c("Random slopes are not supported",
-                       "i" = "Only random intercepts in the form {.code (1 | group)} are allowed."))
+                       "i" = "Only random intercepts in the form {.code (1 | group)} are currently allowed."))
     }
   }
 
@@ -157,18 +160,18 @@ prepare_data <- function(formula = NULL,
   map_re <- rep(seq_along(re_vars), n_groups_vars)
 
   return(list(
-    X_design      = X_design,
-    W_design      = W_design,
-    Z_design      = Z_design,
-    map_re        = map_re,
-    n_re          = length(map_re),
-    n_re_vars     = length(re_vars),
-    has_random    = TRUE,
-    formula_fix   = fixed_formula,
-    terms_fix     = fixed_terms,
-    terms_sd      = sd_terms,
-    xlevels_fix   = xlevels_fix,
-    xlevels_sd    = xlevels_sd,
+    X_design = X_design,
+    W_design = W_design,
+    Z_design = Z_design,
+    map_re = map_re,
+    n_re = length(map_re),
+    n_re_vars = length(re_vars),
+    has_random = TRUE,
+    formula_fix = fixed_formula,
+    terms_fix = fixed_terms,
+    terms_sd = sd_terms,
+    xlevels_fix = xlevels_fix,
+    xlevels_sd = xlevels_sd,
     contrasts_fix = contrasts_fix,
     contrasts_sd  = contrasts_sd
   ))
