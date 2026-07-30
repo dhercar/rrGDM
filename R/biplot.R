@@ -11,7 +11,8 @@
 #'   plot. Default is \code{c(1, 2)}.
 #' @param rotate Logical indicating whether to apply varimax rotation
 #'   (via \code{\link[stats]{varimax}}) before plotting. Default is
-#'   \code{TRUE}.
+#'   \code{TRUE}. The result of varimax rotation is that ordination axes are ordered relative to their
+#'   associated importance.
 #' @param type Character string: either \code{'conditional'} (site scores
 #'   including sample-level error, \code{L}) or \code{'marginal'} (site
 #'   scores as determined by environmental loadings only, \code{L_m}). Default is
@@ -23,9 +24,9 @@
 #' @param add_points Logical indicating whether to add the default sample
 #'   points layer via \code{ggplot2::geom_point()}. Default is \code{TRUE}.
 #'   Set to \code{FALSE} to omit this layer entirely and add a fully custom
-#'   one instead -- the returned plot's default data already contains the
-#'   rotated latent coordinates (\code{LV.1}, \code{LV.2}) together with all
-#'   columns of \code{x$X}, so e.g.
+#'   one instead. The returned plot's default data already contains the
+#'   rotated latent coordinates together with all
+#'   columns used to fit the model, so
 #'   \code{biplot(model, add_points = FALSE) + ggplot2::geom_point(ggplot2::aes(fill = pH), shape = 21)}
 #'   works directly, with more control over aesthetics, shapes, and legends.
 #' @param env_load Logical indicating whether to add environmental loadings
@@ -34,13 +35,9 @@
 #'   positioned by their (Spearman) correlation with each plotted latent
 #'   axis. Default is \code{FALSE}.
 #' @param species_cor_n Optional integer. If \code{species_cor = TRUE}, only
-#'   the \code{species_cor_n} species with the strongest correlation
-#'   (largest Euclidean norm of the two plotted-axis correlations) are
-#'   labelled -- useful when the community matrix has hundreds or thousands
-#'   of species, where labelling all of them would be unreadable. Default is
-#'   \code{20}; a warning is issued if there are more species than this,
-#'   noting that \code{species_cor_n} can be increased. Set to \code{NULL}
-#'   to label all species with no cap.
+#'   the \code{species_cor_n} species with the strongest correlation are
+#'   labelled. Useful when the community matrix has hundreds or thousands
+#'   of species. Default is \code{20}. Set to \code{NULL} to label all species.
 #' @param env_load_scale Numeric scale factor applied to environmental
 #'   loading arrows. Default is 1.
 #' @param sp_load_scale Numeric scale factor applied to species-correlation
@@ -80,19 +77,17 @@
 #' biplot(m1,
 #'        shape_by = 'Region',
 #'        col_by = 'pH',
-#'        type = 'conditional') +
-#'   ggplot2::scale_colour_viridis_c()
+#'        type = 'conditional')
 #'
-#' # Fully custom point styling:
+#' # Custom:
 #' biplot(m1, add_points = FALSE) +
 #'   ggplot2::geom_point(ggplot2::aes(fill = pH), shape = 21, size = 3) +
 #'   ggplot2::scale_fill_viridis_c()
 #'
-#' # Only label the 20 species most strongly correlated with the plotted axes
+#' # Add species correlation with latent axes
 #' biplot(m1, species_cor = TRUE, species_cor_n = 20)
 #' }
 #'
-#' @importFrom ggplot2 ggplot aes geom_hline geom_vline geom_point geom_segment geom_text labs coord_equal xlab ylab arrow unit .data
 #' @importFrom grid arrow unit
 #' @importFrom stats cor varimax biplot
 #' @method biplot rrGDM
@@ -112,6 +107,13 @@ biplot.rrGDM <- function(x,
                          text_size = 3,
                          compare = FALSE,
                          ...) {
+
+  if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    cli::cli_abort(c(
+      "x" = "biplot method for rrGDM objects requires the {.pkg ggplot2} package, which is not installed.",
+      "i" = "You can install it via: {.code install.packages(\"ggplot2\")}."
+    ))
+  }
 
   # ---------------------- Initial checks ---------------------
 
@@ -226,7 +228,7 @@ biplot.rrGDM <- function(x,
 
   # ----------------- BASE PLOT --------------------------
   # Empty plot
-  plot_obj <- ggplot2::ggplot(points_rot, ggplot2::aes(x = .data$LV.1, y = .data$LV.2)) +
+  plot_obj <- ggplot2::ggplot(points_rot, ggplot2::aes(x = ggplot2::.data$LV.1, y = ggplot2::.data$LV.2)) +
     ggplot2::coord_equal() +
     ggplot2::xlab(paste0('LV', k[1])) +
     ggplot2::ylab(paste0('LV', k[2]))
@@ -238,15 +240,15 @@ biplot.rrGDM <- function(x,
   if (add_points) {
     if (has_col && has_shape) {
       plot_obj <- plot_obj +
-        ggplot2::geom_point(ggplot2::aes(color = .data[[col_by]], shape = as.factor(.data[[shape_by]]))) +
+        ggplot2::geom_point(ggplot2::aes(color = ggplot2::.data[[col_by]], shape = as.factor(ggplot2::.data[[shape_by]]))) +
         ggplot2::labs(color = col_by, shape = shape_by)
     } else if (has_col) {
       plot_obj <- plot_obj +
-        ggplot2::geom_point(ggplot2::aes(color = .data[[col_by]])) +
+        ggplot2::geom_point(ggplot2::aes(color = ggplot2::.data[[col_by]])) +
         ggplot2::labs(color = col_by)
     } else if (has_shape) {
       plot_obj <- plot_obj +
-        ggplot2::geom_point(ggplot2::aes(shape = .data[[shape_by]])) +
+        ggplot2::geom_point(ggplot2::aes(shape = ggplot2::.data[[shape_by]])) +
         ggplot2::labs(shape = shape_by)
     } else {
       plot_obj <- plot_obj + ggplot2::geom_point()
@@ -267,10 +269,11 @@ biplot.rrGDM <- function(x,
 
       plot_obj <- plot_obj +
         ggplot2::geom_segment(data = loadings_rot,
-                              ggplot2::aes(x = 0, y = 0, xend = .data$LV.1, yend = .data$LV.2),
+                              ggplot2::aes(x = 0, y = 0, xend = ggplot2::.data$LV.1, yend = ggplot2::.data$LV.2),
                               arrow = grid::arrow(angle = 15, length = grid::unit(0.2, 'cm'))) +
         ggplot2::geom_text(data = loadings_rot,
-                           ggplot2::aes(label = .data$var, x = .data$LV.1 * 1.2, y = .data$LV.2 * 1.2))
+                           size = text_size,
+                           ggplot2::aes(label = ggplot2::.data$var, x = ggplot2::.data$LV.1 * 1.2, y = ggplot2::.data$LV.2 * 1.2))
     }
   }
 
@@ -297,9 +300,6 @@ biplot.rrGDM <- function(x,
     sp_names <- colnames(Y_com)
     if (is.null(sp_names)) sp_names <- paste0('sp', seq_len(ncol(Y_com)))
 
-    # Vectorized correlation of every species column against each plotted
-    # axis (much faster than apply()-ing cor() one species at a time,
-    # which matters when there are hundreds/thousands of species).
     sp_load <- cbind(
       LV.1 = as.numeric(stats::cor(Y_com, points_rot$LV.1, method = 'spearman')),
       LV.2 = as.numeric(stats::cor(Y_com, points_rot$LV.2, method = 'spearman'))
@@ -307,8 +307,6 @@ biplot.rrGDM <- function(x,
 
     sp_load_df <- data.frame(sp_load, sp = sp_names, check.names = FALSE)
 
-    # Optionally restrict to the n species with the strongest combined
-    # correlation (Euclidean norm across the two plotted axes).
     if (!is.null(species_cor_n) && nrow(sp_load_df) > species_cor_n) {
       cli::cli_warn(c(
         "!" = "Labelling only the {species_cor_n} species with the strongest correlation ({nrow(sp_load_df)} available).",
@@ -323,9 +321,9 @@ biplot.rrGDM <- function(x,
       ggplot2::geom_text(data = sp_load_df,
                          colour = 'red',
                          size = text_size,
-                         ggplot2::aes(label = .data$sp,
-                                      x = .data$LV.1 * sp_load_scale,
-                                      y = .data$LV.2 * sp_load_scale))
+                         ggplot2::aes(label = ggplot2::.data$sp,
+                                      x = ggplot2::.data$LV.1 * sp_load_scale,
+                                      y = ggplot2::.data$LV.2 * sp_load_scale))
   }
 
   # ---------------------------- COND. VS MARG. ----------------------------
@@ -341,10 +339,10 @@ biplot.rrGDM <- function(x,
       plot_obj <- plot_obj +
         ggplot2::geom_point(data = points_m,
                             shape = 21,
-                            ggplot2::aes(x = .data$LV_m.1, y = .data$LV_m.2, fill = 'marginal')) +
+                            ggplot2::aes(x = ggplot2::.data$LV_m.1, y = ggplot2::.data$LV_m.2, fill = 'marginal')) +
         ggplot2::geom_segment(data = points_m,
-                              ggplot2::aes(x = .data$LV.1, y = .data$LV.2,
-                                           xend = .data$LV_m.1, yend = .data$LV_m.2),
+                              ggplot2::aes(x = ggplot2::.data$LV.1, y = ggplot2::.data$LV.2,
+                                           xend = ggplot2::.data$LV_m.1, yend = ggplot2::.data$LV_m.2),
                               colour = 'grey')
     }
   }
