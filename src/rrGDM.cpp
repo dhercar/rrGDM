@@ -39,8 +39,12 @@ Type objective_function<Type>::operator() ()
   // ---------- 3. LATENT COMPOSITIONS ---------
   matrix<Type> L_m = X * lambda;
   matrix<Type> L = L_m;
-  L += u_sample;
-  if (has_random && u.size() > 0) {   // include other random effects
+
+  if (has_sample_re) { // add sample level error
+    L += u_sample;
+  }
+
+  if (has_random && u.size() > 0) {   // add other random effects
     L += Z * u;
   }
 
@@ -73,6 +77,7 @@ Type objective_function<Type>::operator() ()
   }
 
   //----------PAIRWISE LOOP (START)----------
+  // !!! Could use matrix multiplication instead, left as loop to allow parallel comp.
   vector<Type> mu_vec(n_pairs);
   for (int i = 0; i < n_pairs; i++) {
 
