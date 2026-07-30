@@ -5,7 +5,7 @@
 #' @param k An integer specifying the number of latent variables to be used in the model. Default is 2.
 #' @param formula Formula specifying the model to be fitted.
 #' @param formula_sd Formula specifying the model for the dispersion parameter. Default is ~1 (intercept only).
-#' @param constraint Integer. Specifies identifiability constraints. 1: Constraint applied to environmental loadings matrix ($\lambda$); 2: Constraint applied to site random effects matrix (U). Default is 1.
+#' @param constraint Integer. Specifies identifiability constraints. 1: Constraint applied to environmental loadings matrix (\eqn{\Lambda}); 2: Constraint applied to site random effects matrix (U). Default is 1.
 #' @param dist_method A character string specifying the distance method to be used (e.g., "euclidean", "bray"). Default is "bray".
 #' @param trans Function used to transform the response matrix before computing dissimilarities (e.g., log, sqrt). Default is no transformation.
 #' @param binary Logical indicating whether the response variable should be treated as binary (e.g., presence-absence). Default is FALSE.
