@@ -46,7 +46,7 @@ rrGDM <- function(Y,
 
   if (!is.null(seed)) set.seed(seed)
   if (!(constraint %in% c(0,1,2))) cli::cli_warn("Identifiable constraint should be set to either 0, 1, or 2")
-  if (!is.null(scale_diss) && !(family %in% c('binomial','beta.binomial'))) {
+  if (!is.null(scale_diss) && (family %in% c('binomial','beta.binomial'))) {
     cli::cli_warn("Ignoring scale_diss for binomial and beta-binomial families ")
     scale_diss <- NULL
   }
@@ -269,10 +269,12 @@ rrGDM <- function(Y,
   # Update objective environment with fixed and random for best fit
   if (length(re_idx) > 0) {
     obj$env$last.par.best[re_idx] <- base_re
-    obj$env$last.par[re_idx]      <- base_re
+    obj$env$last.par[re_idx]  <- base_re
   }
 
-  obj$fn(best_fit$par) # update objective
+  obj$fn(best_fit$par) # update objective (see * below)
+  best_par <- obj$env$last.par # snapshot before sdrep
+
   # SD report
   sd_rep <- NULL
 
@@ -297,6 +299,7 @@ rrGDM <- function(Y,
     opt = best_fit,
     obj = obj,
     sd_rep = sd_rep,
+    best_par = best_par, # *good last par from call above
     k = k,
     family = family,
     link = link,
