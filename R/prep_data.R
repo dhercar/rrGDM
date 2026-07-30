@@ -1,4 +1,7 @@
 #' Prepare design matrices and data (Internal)
+#' @importFrom stats model.frame model.matrix terms update
+#' @importFrom reformulas nobars findbars
+#' @importFrom Matrix sparseMatrix sparse.model.matrix
 #' @noRd
 prepare_data <- function(formula = NULL,
                          formula_sd = NULL,
@@ -21,7 +24,7 @@ prepare_data <- function(formula = NULL,
   }
 
   if (!is.null(formula_sd)) {
-    if (attr(terms(formula_sd), "intercept") == 0) {
+    if (attr(stats::terms(formula_sd), "intercept") == 0) {
       cli::cli_abort(c(
         "{.var formula_sd} must include an intercept.",
         "!" = "Check your {.var formula_sd} and avoid {.code 0} or {.code -1} from your {.var formula_sd}."
@@ -60,9 +63,9 @@ prepare_data <- function(formula = NULL,
     } else {
       # --- FIXED EFFECTS ---
       fixed_formula <- reformulas::nobars(formula)
-      mf_fix <- model.frame(fixed_formula, data = data)
+      mf_fix <- stats::model.frame(fixed_formula, data = data)
       fixed_terms <- attr(mf_fix, "terms")
-      X_tmp <- model.matrix(fixed_terms, data = mf_fix)
+      X_tmp <- stats::model.matrix(fixed_terms, data = mf_fix)
 
       xlevels_fix <- if (is.data.frame(data)) {
         lapply(data[sapply(data, is.factor)], levels)
@@ -88,10 +91,10 @@ prepare_data <- function(formula = NULL,
                        "x" = "Check {.var formula_sd}: random effects are only supported in the main formula."))
     }
 
-    sd_formula <- update(formula_sd, ~ 1 + .)
-    mf_sd <- model.frame(sd_formula, data = data)
+    sd_formula <- stats::update(formula_sd, ~ 1 + .)
+    mf_sd <- stats::model.frame(sd_formula, data = data)
     sd_terms <- attr(mf_sd, "terms")
-    W_design <- model.matrix(sd_terms, data = mf_sd)
+    W_design <- stats::model.matrix(sd_terms, data = mf_sd)
 
     xlevels_sd <- if (is.data.frame(data)) {
       lapply(data[sapply(data, is.factor)], levels)
