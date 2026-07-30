@@ -3,3 +3,5 @@
 #' @keywords internal
 #' @useDynLib rrGDM, .registration = TRUE
 "_PACKAGE"
+
+utils::globalVariables(".data")
