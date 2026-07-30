@@ -139,6 +139,7 @@ predict.rrGDM <- function(object,
 
       idx <- names(object$sd_rep$value) %in% c('lambda', 'beta')
       sim <- MASS::mvrnorm(n = n_sim, mu = object$sd_rep$value[idx], Sigma = object$sd_rep$cov[idx, idx]) # sample from vcov
+
       samples <- lapply(1:nrow(sim), function(x){ # Expected coordinates
         sim_i <- sim[x,]
         lambda <- matrix(sim_i[names(sim_i) == 'lambda'], ncol = object$k)
@@ -152,10 +153,10 @@ predict.rrGDM <- function(object,
       })
 
     } else if (sample_param == FALSE)  {
+      L <- X_design %*% object$obj$report(object$best_par)$lambda
       samples <- lapply(1:n_sim, function(x){
-        L <- X_design %*% object$obj$report(object$opt$par)$lambda # Point estimate of lambda
         if (sim_site)  {  # Include site level error (dispersion)? otherwise expected value
-          tau <- exp(W_design %*% object$obj$report(object$opt$par)$beta)
+          tau <- exp(W_design %*% object$obj$report(object$best_par)$beta)
           L = L  + matrix(rnorm(nrow(X_design) * object$k, 0, rep(tau, object$k)), ncol = object$k)
         }
         data.frame(draw = x, L = L)
@@ -185,9 +186,9 @@ predict.rrGDM <- function(object,
 
   } else {
     if (conditional == TRUE) {
-     L <- object$obj$report(object$opt$par)$L
+     L <- object$obj$report(object$best_par)$L
     } else if (conditional == FALSE) {
-     L <- X_design %*% object$obj$report(object$opt$par)$lambda
+     L <- X_design %*% object$obj$report(object$best_par)$lambda
     }
       if (ordination == TRUE) {
         predict_ord <- data.frame(L = L, sample = 1:nrow(X_new), X_new)
