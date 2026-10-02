@@ -44,22 +44,16 @@ rrGDM <- function(Y,
                   trace = FALSE,
                   control = list()) {
 
+  if (anyNA(Y)) cli::cli_abort("{.arg Y} contains missing values.")
+  if (!is.null(X) && anyNA(X)) cli::cli_abort("{.arg X} contains missing values.")
+
   if (!is.null(seed)) set.seed(seed)
   if (!(constraint %in% c(0,1,2))) cli::cli_warn("Identifiable constraint should be set to either 0, 1, or 2")
+
   if (!is.null(scale_diss) && (family %in% c('binomial','beta.binomial'))) {
     cli::cli_warn("Ignoring scale_diss for binomial and beta-binomial families ")
     scale_diss <- NULL
   }
-  # ToDo: CHECKS
-  # - Y has no NA
-  # - X has no NA
-  # - formula_sd has *at least* an intercept
-
-  # Already taken care of by other functions:
-  #  - binary is logical is checked by make_y_df()
-  # - `trans` is null or a function is checked by make_y_df()
-  # - `formula` and `formula_sd` are already checked within prep_data()
-  # - dist method is already checked within make_Y_diss()
 
   # ---------- DATA PREP ----------
   cli::cli_process_start('Preparing data')
@@ -93,7 +87,7 @@ rrGDM <- function(Y,
                       binary = binary,
                       method = dist_method,
                       num_den = (family %in% c('binomial', 'beta.binomial')))
-
+  if (anyNA(Y_df)) cli::cli_abort("Dissimilarities computed with {.val {dist_method}} contain missing values.")
   D_mat <- Y_df[, c(1,2)]  # Design matrix (row col pairs)
   Y_val <- Y_df[,3]  # Dissimilarity value (or n unshared species if num_den type of dissimilarity)
   Y_val <- scale_dist(Y_val, sort(scale_diss))  # re-scale between set interval, if defined by user (bypassed if NULL)
@@ -108,6 +102,11 @@ rrGDM <- function(Y,
   # ---------- IDENTIFIABILITY CHECKS ----------
   n_env <- ncol(data_design$X_design)
   n_samples <- nrow(Y)
+
+  if (n_env == 0 && constraint == 1) {
+    constraint <- 2
+    cli::cli_warn("No predictors in {.arg formula}: identifiability constraint set to 2.")
+  }
 
   # Check constraints
   if (constraint == 0) cli::cli_warn("No identifiability constraint. Consider using constraint == 1, or constraint == 2")
@@ -184,7 +183,7 @@ rrGDM <- function(Y,
 
   if (constraint == 1) {
     # upper triangle of Lambda starts at exactly 0 and ignored in optimisation.
-    # IMPARTANT !!!: Positive diagonal is NOT hard-imposed at the moment, so sign flips are possible
+    # IMPORTANT !!!: Positive diagonal is NOT hard-imposed at the moment, so sign flips are possible
     parameters$lambda[upper.tri(parameters$lambda)] <- 0
     map_lambda <- matrix(seq_len(n_env * k), n_env, k)
     map_lambda[upper.tri(map_lambda)] <- NA
@@ -197,7 +196,7 @@ rrGDM <- function(Y,
 
   } else if (constraint == 2) {
     # Corner constraint on U: upper triangle fixed at 0.
-    # IMPOSTIANT!!!! : Positive diagonal is NOT hard-imposed at the moment
+    # IMPORTANT!!!! : Positive diagonal is NOT hard-imposed at the moment
     parameters$u_sample[upper.tri(parameters$u_sample)] <- 0
     map_u <- matrix(seq_len(n_samples * k), n_samples, k)
     map_u[upper.tri(map_u)] <- NA
@@ -218,7 +217,6 @@ rrGDM <- function(Y,
     silent = !trace,
     map = mapping
   )
-
 
   # ------------- OPTIMISE --------------
   control_def <- list(iter.max = 1000)   # nlminb higher iter.max
@@ -296,6 +294,7 @@ rrGDM <- function(Y,
     W_design = data_design$W_design,
     Z_design = data_design$Z_design,
     map_re = data_design$map_re,
+    re_vars = data_design$re_vars,
     opt = best_fit,
     obj = obj,
     sd_rep = sd_rep,
