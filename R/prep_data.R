@@ -35,43 +35,48 @@ prepare_data <- function(formula = NULL,
   if (!is.null(data) && !(is.matrix(data) || is.data.frame(data))) {
     cli::cli_abort("{.var data} must be a {.cls matrix} or {.cls data.frame}.")
   }
+  if (is.matrix(data)) data <- as.data.frame(data)
+
+  if (!is.null(data) && nrow(data) != n) {
+    cli::cli_abort(c(
+      "x" = "{.arg X} and {.arg Y} must have the same number of rows (sites).",
+      "i" = "{.arg X} has {nrow(data)} row{?s}; {.arg Y} has {n}."
+    ))
+  }
   # ---- end of data validation ----
 
   if (is.null(formula_sd) || is.null(data)) {
     formula_sd  <- ~1
   }
 
-  # Initialise terms to NULL
-  fixed_terms <- NULL
-  sd_terms <- NULL
+  # Initialise terms to NULL / EMPTY
+  fixed_terms <- stats::terms(~0)
+  sd_terms <- stats::terms(~1)
   xlevels_fix <- NULL
   xlevels_sd <- NULL
   contrasts_fix <- NULL
   contrasts_sd <- NULL
 
   if (is.null(data)) {
-    X_design <- integer(0)
-    W_design <- integer(0)
+    X_design <- matrix(numeric(0), nrow = n, ncol = 0)
+    W_design <- matrix(1, nrow = n, ncol = 1, dimnames = list(NULL, "(Intercept)"))
     fixed_formula <- ~0
 
   } else {
 
     if (is.null(formula)) {
-      X_design <- integer(0)
+      X_design <- matrix(numeric(0), nrow = n, ncol = 0)
       fixed_formula <- ~0
 
     } else {
       # --- FIXED EFFECTS ---
       fixed_formula <- reformulas::nobars(formula)
-      mf_fix <- stats::model.frame(fixed_formula, data = data)
+      mf_fix <- stats::model.frame(fixed_formula, data = data, na.action = stats::na.fail)
       fixed_terms <- attr(mf_fix, "terms")
       X_tmp <- stats::model.matrix(fixed_terms, data = mf_fix)
 
-      xlevels_fix <- if (is.data.frame(data)) {
-        lapply(data[sapply(data, is.factor)], levels)
-      } else {
-        NULL
-      }
+      xlevels_fix <- stats::.getXlevels(fixed_terms, mf_fix) else NULL
+
 
       if ("(Intercept)" %in% colnames(X_tmp)) {
         intercept_idx <- which(colnames(X_tmp) == "(Intercept)")
@@ -92,16 +97,11 @@ prepare_data <- function(formula = NULL,
     }
 
     sd_formula <- stats::update(formula_sd, ~ 1 + .)
-    mf_sd <- stats::model.frame(sd_formula, data = data)
+    mf_sd <- stats::model.frame(sd_formula, data = data, na.action = stats::na.fail)
     sd_terms <- attr(mf_sd, "terms")
     W_design <- stats::model.matrix(sd_terms, data = mf_sd)
 
-    xlevels_sd <- if (is.data.frame(data)) {
-      lapply(data[sapply(data, is.factor)], levels)
-    } else {
-      NULL
-    }
-
+    xlevels_sd <- if (is.data.frame(data)) stats::.getXlevels(sd_terms, mf_sd) else NULL
     contrasts_sd <- attr(W_design, "contrasts")
   }
 
@@ -121,6 +121,7 @@ prepare_data <- function(formula = NULL,
       map_re = integer(0),
       n_re = 0,
       n_re_vars = 0,
+      re_vars = character(0),
       has_random = FALSE,
       formula_fix = fixed_formula,
       terms_fix = fixed_terms,
@@ -142,6 +143,10 @@ prepare_data <- function(formula = NULL,
       var <- deparse(re[[3]])
       if (!(var %in% colnames(data))) {
         cli::cli_abort("Variable {.val {var}} not found in the provided data.")
+      }
+
+      if (anyNA(data[[var]])) {
+        cli::cli_abort("Grouping variable {.val {var}} has missing values.")
       }
 
       factor_vec <- factor(data[[var]])
@@ -169,6 +174,7 @@ prepare_data <- function(formula = NULL,
     map_re = map_re,
     n_re = length(map_re),
     n_re_vars = length(re_vars),
+    re_vars = re_vars,
     has_random = TRUE,
     formula_fix = fixed_formula,
     terms_fix = fixed_terms,
