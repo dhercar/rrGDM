@@ -23,7 +23,7 @@ Type objective_function<Type>::operator() ()
   PARAMETER_MATRIX(u_sample);   // U (sample-level error)
   PARAMETER(log_scale);     // Scale parameter (dispersion)
   PARAMETER_VECTOR(beta);   // effects on sigma (dispersion)
-  PARAMETER_MATRIX(u);  // additional random effects (standardised)
+  PARAMETER_MATRIX(u);  // additional random effects
   PARAMETER_VECTOR(log_sigma_re);  // vector of SD for each RE term
 
   // Derived variables
@@ -110,8 +110,8 @@ Type objective_function<Type>::operator() ()
 
     // for stability
     if (family == 1 || family == 2 || family == 3) {
-      if (mu < Type(1e-14)) mu = Type(1e-14);
-      if (mu > Type(1.0 - 1e-14)) mu = Type(1.0 - 1e-14);
+      if (mu < Type(1e-8)) mu = Type(1e-8);
+      if (mu > Type(1.0 - 1e-8)) mu = Type(1.0 - 1e-8);
     }
     mu_vec(i) = mu;
   }
@@ -156,6 +156,7 @@ Type objective_function<Type>::operator() ()
   REPORT(L_m);
 
   if (has_sample_re) REPORT(u_sample);
+  if (has_random) REPORT(u);
 
   ADREPORT(lambda);
   ADREPORT(beta);
