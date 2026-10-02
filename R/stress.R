@@ -62,7 +62,7 @@ stress <- function(object,
     ))
   }
 
-  L_hat <- object$obj$report()$L
+  L_hat <- get_report(object)$L
 
   if (is.null(L_hat)) {
     cli::cli_abort(c(

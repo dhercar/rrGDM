@@ -53,7 +53,8 @@
 #' A list of class \code{wald_rrGDM} with two elements:
 #' \itemize{
 #'   \item \code{lambda}: a \code{data.frame} with one row per predictor in
-#'     \code{X_design}, with columns \code{term}, \code{Size}, \code{Wald},
+#'     \code{X_design} (zero rows if the mean model has no predictors), with
+#'     columns \code{term}, \code{Size}, \code{Wald},
 #'     \code{Df} (see Details), \code{Pr_Chisq}, \code{Sig}.
 #'   \item \code{beta}: a \code{data.frame} with one row per predictor in
 #'     \code{W_design} (excluding the intercept unless
@@ -89,12 +90,7 @@ wald_test <- function(object, include_intercept = FALSE) {
   sdr_cov  <- sd_rep$cov
 
   n_env <- ncol(object$X_design)
-  if (is.null(n_env) || n_env == 0) {
-    cli::cli_abort(c(
-      "x" = "The model contains no predictors in {.field X_design}.",
-      "i" = "{.fn wald_test} requires at least one predictor with an estimated loading."
-    ))
-  }
+  if (is.null(n_env)) n_env <- 0L
 
   k  <- object$k
   env_nms <- colnames(object$X_design)
@@ -110,17 +106,17 @@ wald_test <- function(object, include_intercept = FALSE) {
   Sigma_full <- sdr_cov[lam_idx, lam_idx, drop = FALSE]
 
   # Check values match with sdreport
-  report_lambda <- tryCatch(object$obj$report(object$best_par)$lambda, error = function(e) NULL)
+  report_lambda <- tryCatch(get_report(object)$lambda, error = function(e) NULL)
   if (!is.null(report_lambda) &&
       all(dim(report_lambda) == dim(lambda_hat)) &&
       !isTRUE(all.equal(unname(lambda_hat), unname(report_lambda), tolerance = 1e-6))) {
     cli::cli_abort(c(
-      "x" = "ADREPORT-derived {.field lambda} does not match {.code object$obj$report(object$best_par)$lambda}.",
+      "x" = "ADREPORT-derived {.field lambda} does not match {.code get_report(object)$lambda}.",
       "i" = "If the problem persist, please report the issue."
     ))
   }
 
-  if (constraint == 0) {
+  if (constraint == 0 && n_env > 0) {
     cli::cli_warn(c(
       "!" = "Model was fit with {.code constraint = 0} (no identifiability constraint).",
       "i" = "Individual loadings in {.field lambda} are not identified under rotation of the latent space; interpret per-predictor Wald tests with caution."
@@ -170,6 +166,13 @@ wald_test <- function(object, include_intercept = FALSE) {
 
   lambda_df <- do.call(rbind, lambda_res)
 
+  # Empty loadings table when there are no predictors in the mean model
+  if (n_env == 0) {
+    lambda_df <- data.frame(term = character(0), Size = numeric(0), Wald = numeric(0),
+                            Df = integer(0), Pr_Chisq = numeric(0),
+                            stringsAsFactors = FALSE)
+  }
+
   if (length(singular_terms) > 0) {
     cli::cli_warn(c(
       "!" = "Covariance matrix was singular for term{?s}: {.val {singular_terms}}.",
@@ -204,11 +207,11 @@ wald_test <- function(object, include_intercept = FALSE) {
   se_hat   <- sqrt(diag(sdr_cov[beta_idx, beta_idx, drop = FALSE]))
 
   # Sanity check that values match
-  report_beta <- tryCatch(object$obj$report(object$best_par)$beta, error = function(e) NULL)
+  report_beta <- tryCatch(get_report(object)$beta, error = function(e) NULL)
   if (!is.null(report_beta) && length(report_beta) == length(beta_hat) &&
       !isTRUE(all.equal(unname(beta_hat), unname(report_beta), tolerance = 1e-6))) {
     cli::cli_abort(c(
-      "x" = "ADREPORT-derived {.field beta} does not match {.code object$obj$report(object$best_par)$beta}.",
+      "x" = "ADREPORT-derived {.field beta} does not match {.code get_report(object)$beta}.",
       "i" = "This is likely a bug, please report if the problem persists."
     ))
   }
@@ -289,9 +292,9 @@ print.wald_rrGDM <- function(x, digits = 4, ...) {
   if (nrow(x$beta) > 0) {
     d <- x$beta
     d$Estimate <- fmt_num(d$Estimate)
-    d$SE       <- fmt_num(d$SE)
-    d$z        <- fmt_num(d$z)
-    d$Pr_z     <- format_pval(d$Pr_z)
+    d$SE <- fmt_num(d$SE)
+    d$z <- fmt_num(d$z)
+    d$Pr_z <- format_pval(d$Pr_z)
     print(d, row.names = FALSE, right = TRUE)
   } else {
     cli::cli_alert_info("No dispersion terms.")

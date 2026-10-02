@@ -22,6 +22,7 @@
 #' in the latent space. Defaults to \code{"response"}.
 #' @param probs Numeric vector of probabilities for calculating quantiles from
 #' the simulated distribution. Defaults to \code{c(0.025, 0.5, 0.975)}.
+#' @param conditional Logical. If \code{TRUE}, returns predictions from the fitted (conditional) latent positions of the samples used to fit the model, including sample-level and random-effect deviations. Only available when \code{X_new = NULL}. Defaults to \code{FALSE}.
 #' @param ... not used
 #'
 #' @return
@@ -68,6 +69,13 @@ predict.rrGDM <- function(object,
     ))
   }
 
+  if (!conditional && length(object$map_re) > 0) {
+    cli::cli_inform(c(
+      "i" = "Random-effect terms such as {.code (1 | group)} are not included: only fixed effects and sample-level dispersion are used.",
+      "*" = "Expected dissimilarities between samples will be understated if group-level variance is large."
+    ))
+  }
+
   # Inverse link
   inv_link <- if (type == 'link') function(x) x else object$inv_link
 
@@ -80,7 +88,7 @@ predict.rrGDM <- function(object,
     W_design <- object$W_design
 
   } else {
-    X_new <- data.frame(X_new)
+    X_new <- as.data.frame(X_new)
     tt_fix <- delete.response(object$terms_fix)
 
     mf_fix <- stats::model.frame(
@@ -119,6 +127,7 @@ predict.rrGDM <- function(object,
       contrasts.arg = object$contrasts_sd)
   }
 
+  if (is.null(X_new)) X_new <- data.frame(row.names = seq_len(nrow(W_design)))
   # --------------------------- GET COORDINATES --------------------------------------
 
   if (!ordination && nrow(X_new) < 2) {
@@ -154,11 +163,12 @@ predict.rrGDM <- function(object,
       })
 
     } else if (sample_param == FALSE)  {
-      L_base <- X_design %*% object$obj$report(object$best_par)$lambda
+      rep_par <- get_report(object)
+      L_base <- X_design %*% rep_par$lambda
+      tau <- exp(W_design %*% rep_par$beta)
       samples <- lapply(1:n_sim, function(x){
         L <- L_base
         if (sim_site)  {
-          tau <- exp(W_design %*% object$obj$report(object$best_par)$beta)
           L <- L + matrix(rnorm(nrow(X_design) * object$k, 0, rep(tau, object$k)), ncol = object$k)
         }
         data.frame(draw = x, L = L)
@@ -188,9 +198,9 @@ predict.rrGDM <- function(object,
 
   } else {
     if (conditional == TRUE) {
-     L <- object$obj$report(object$best_par)$L
+     L <- get_report(object)$L
     } else if (conditional == FALSE) {
-     L <- X_design %*% object$obj$report(object$best_par)$lambda
+     L <- X_design %*% get_report(object)$lambda
     }
       if (ordination == TRUE) {
         predict_ord <- data.frame(L = L, sample = 1:nrow(X_new), X_new)

@@ -191,7 +191,7 @@ biplot.rrGDM <- function(x,
 
   # ---------------------------- EXTRACT REPORT ----------------------------
 
-  report <- tryCatch(x$obj$report(), error = function(e) {
+  report <- tryCatch(get_report(x), error = function(e) {
     cli::cli_abort(c(
       "x" = "Could not extract model report from {.arg x$obj}.",
       "i" = "Original error: {conditionMessage(e)}"

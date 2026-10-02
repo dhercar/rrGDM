@@ -47,3 +47,10 @@ make_inv_link <- function(link) {
          cli::cli_abort("Link {.val {link}} is not supported."))
 }
 
+
+
+#' Model report at the best-fit parameters (internal)
+#' `obj$report()` with no argument uses `obj$env$last.par`, which later calls
+#' (e.g. `sdreport`) can overwrite. `best_par` is the snapshot taken after fitting.
+#' @noRd
+get_report <- function(object) object$obj$report(object$best_par)
