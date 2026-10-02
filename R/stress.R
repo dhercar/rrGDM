@@ -47,7 +47,7 @@ stress <- function(object,
                    type  = c("nonmetric", "metric"),
                    scale = c("link", "response")) {
 
-  type  <- match.arg(type)
+  type <- match.arg(type)
   scale <- match.arg(scale)
 
   if (!inherits(object, "rrGDM")) {
@@ -99,18 +99,18 @@ stress <- function(object,
   }
 
   if (type == "nonmetric") {
-    ord      <- order(obs_vec)
+    ord <- order(obs_vec, fit_vec)
     obs_sort <- obs_vec[ord]
     fit_sort <- fit_vec[ord]
     dhat  <- stats::isoreg(obs_sort, fit_sort)$yf
-    num   <- sum((dhat - fit_sort)^2)
+    num <- sum((dhat - fit_sort)^2)
     denom <- sum(fit_sort^2)
 
     if (denom == 0) {
       cli::cli_abort("Sum of squared modelled distances is 0; stress is undefined.")
     }
   } else {
-    num   <- sum((obs_vec - fit_vec)^2)
+    num <- sum((obs_vec - fit_vec)^2)
     denom <- sum(obs_vec^2)
     if (denom == 0) {
       cli::cli_abort("Sum of squared observed dissimilarities is 0; stress is undefined.")
