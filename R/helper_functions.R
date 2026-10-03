@@ -54,3 +54,11 @@ make_inv_link <- function(link) {
 #' (e.g. `sdreport`) can overwrite. `best_par` is the snapshot taken after fitting.
 #' @noRd
 get_report <- function(object) object$obj$report(object$best_par)
+
+
+
+#' Collapse a formula into a single string (internal)
+#' @param f A formula.
+#' @noRd
+format_formula <- function(f) paste(trimws(deparse(f)), collapse = " ")
+
