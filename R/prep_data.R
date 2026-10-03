@@ -71,11 +71,13 @@ prepare_data <- function(formula = NULL,
     } else {
       # --- FIXED EFFECTS ---
       fixed_formula <- reformulas::nobars(formula)
-      mf_fix <- stats::model.frame(fixed_formula, data = data, na.action = stats::na.fail)
+      mf_fix <- stats::model.frame(fixed_formula, data = data, na.action = stats::na.pass)
+      bad <- names(mf_fix)[vapply(mf_fix, anyNA, logical(1))]
+      if (length(bad) > 0) cli::cli_abort("Missing values in {.arg formula} variable{?s}: {.var {bad}}.")
       fixed_terms <- attr(mf_fix, "terms")
       X_tmp <- stats::model.matrix(fixed_terms, data = mf_fix)
 
-      xlevels_fix <- stats::.getXlevels(fixed_terms, mf_fix) else NULL
+      xlevels_fix <- stats::.getXlevels(fixed_terms, mf_fix)
 
 
       if ("(Intercept)" %in% colnames(X_tmp)) {
@@ -97,11 +99,13 @@ prepare_data <- function(formula = NULL,
     }
 
     sd_formula <- stats::update(formula_sd, ~ 1 + .)
-    mf_sd <- stats::model.frame(sd_formula, data = data, na.action = stats::na.fail)
+    mf_sd <- stats::model.frame(sd_formula, data = data, na.action = stats::na.pass)
+    bad <- names(mf_sd)[vapply(mf_sd, anyNA, logical(1))]
+    if (length(bad) > 0) cli::cli_abort("Missing values in {.arg formula_sd} variable{?s}: {.var {bad}}.")
     sd_terms <- attr(mf_sd, "terms")
     W_design <- stats::model.matrix(sd_terms, data = mf_sd)
 
-    xlevels_sd <- if (is.data.frame(data)) stats::.getXlevels(sd_terms, mf_sd) else NULL
+    xlevels_sd <- stats::.getXlevels(sd_terms, mf_sd)
     contrasts_sd <- attr(W_design, "contrasts")
   }
 
