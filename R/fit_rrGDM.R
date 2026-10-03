@@ -16,7 +16,7 @@
 #' @param sample_error Logical. If TRUE, includes site-level random effects to account for variation not explained by predictors.
 #' @param seed An integer specifying the seed for random number generation. Default is NULL.
 #' @param init_jitter Numeric. A small standard deviation used to jitter initial parameter values.
-#' @param init_method A character string specifying a method used to obtain initial values for optimisation. Currently, only \code{init_method = 'PCOA'} available.
+#' @param init_method A character string specifying a method used to obtain initial values for optimisation. Currently, only \code{'PCOA'} and \code{'dbRDA'} available.
 #' @param control A list of control parameters passed to stats::nlminb
 #' @return An object of class 'rrGDM' containing the fitted model object, the optimized parameters, and other relevant information.
 #' @importFrom TMB MakeADFun sdreport
@@ -38,17 +38,15 @@ rrGDM <- function(Y,
                   constraint = 1,
                   trans = function(x) x,
                   seed = NULL,
-                  init_jitter = 0.001,
+                  init_jitter = 0.01,
                   n_starts = 1,
                   init_method = 'dbRDA',
                   trace = FALSE,
                   control = list()) {
 
   if (anyNA(Y)) cli::cli_abort("{.arg Y} contains missing values.")
-  if (!is.null(X) && anyNA(X)) cli::cli_abort("{.arg X} contains missing values.")
-
   if (!is.null(seed)) set.seed(seed)
-  if (!(constraint %in% c(0,1,2))) cli::cli_warn("Identifiable constraint should be set to either 0, 1, or 2")
+  if (!(constraint %in% c(0,1,2))) cli::cli_abort("Identifiable constraint should be set to either 0, 1, or 2")
 
   if (!is.null(scale_diss) && (family %in% c('binomial','beta.binomial'))) {
     cli::cli_warn("Ignoring scale_diss for binomial and beta-binomial families ")
@@ -110,7 +108,6 @@ rrGDM <- function(Y,
 
   # Check constraints
   if (constraint == 0) cli::cli_warn("No identifiability constraint. Consider using constraint == 1, or constraint == 2")
-  if ((constraint == 1) && ncol(data_design$X_design) == 0) cli::cli_abort('Predictors should be provided if constraint = 1')
   if (constraint == 1 && k > n_env) cli::cli_warn("k is larger than the number of predictors. This may cause problems. Consider 'constraint == 2'")
   if ((constraint == 2) && !sample_error) cli::cli_abort('sample_error needs to be set to TRUE if constraint = 2')
   if ((constraint == 2) && k > n_samples) cli::cli_abort(paste0("k (", k, ") cannot be larger than the number of samples (", n_samples, ")."))
@@ -158,7 +155,7 @@ rrGDM <- function(Y,
       dist_method = dist_method,
       k  = k,
       constraint  = if (use_X) constraint else 2,
-      QR  = use_X,
+      QR  = use_X || constraint == 2,
       link = link,
       binary = binary)
 
@@ -331,9 +328,147 @@ rrGDM <- function(Y,
 #' @importFrom TMB sdreport
 #'
 include_se <- function(obj, ...) {
-  sd_rep <- sdreport(obj$obj, ...)
+  sd_rep <- TMB::sdreport(obj$obj, getReportCovariance = TRUE, ...)
   obj$sd_rep <- sd_rep
   return(obj)
+}
+
+
+#' Collapse a formula into a single string (internal)
+#' @param f A formula.
+#' @noRd
+format_formula <- function(f) paste(trimws(deparse(f)), collapse = " ")
+
+#' Print method for rrGDM models
+#'
+#' @description
+#' Prints a compact overview of a fitted \code{rrGDM} object.
+#'
+#' @param x A fitted model of class \code{rrGDM}.
+#' @param digits Number of significant digits used to print loadings. Default is 3.
+#' @param n_u Number of rows to print for the sample-level error matrix
+#'   \code{u} and, for each grouping variable, for the random-effect matrix
+#'   (these have one row per sample or per group, so they are truncated).
+#'   Default is 5.
+#' @param ... Currently unused.
+#'
+#' @details
+#' Convergence information includes the convergence code returned by
+#' \code{\link[stats]{nlminb}} (0 indicates successful convergence), whether
+#' the Hessian at the optimum is positive definite (only available if standard
+#' errors were requested) and the largest absolute gradient of the fixed
+#' parameters. Loadings are printed as estimated (i.e., unrotated). Use
+#' \code{\link{get_LV}} to extract the full matrices.
+#'
+#' @importFrom stats formula
+#' @method print rrGDM
+#' @export
+print.rrGDM <- function(x, digits = 3, n_u = 5, ...) {
+
+  if (!inherits(x, "rrGDM")) {
+    cli::cli_abort("{.arg x} must be a fitted {.cls rrGDM} model.")}
+  if (!is.numeric(n_u) || length(n_u) != 1 || is.na(n_u) || n_u < 0) {
+    cli::cli_abort("{.arg n_u} must be a single non-negative number.")}
+
+  lv <- get_LV(x, rotate = FALSE)
+  has_sample_re <- !is.null(lv$u_sample)
+  has_random <- length(x$re_vars) > 0
+  n_env <- ncol(x$X_design)
+  if (is.null(n_env)) n_env <- 0L
+
+  show <- function(label, value) cat(sprintf("  %-24s %s\n", label, value))
+
+  # Print the first n_u rows
+  print_head <- function(mat, what) {
+    n_show <- min(nrow(mat), n_u)
+    n_more <- nrow(mat) - n_show
+    if (n_show > 0) print(mat[seq_len(n_show), , drop = FALSE], digits = digits)
+    if (n_more > 0) {
+      cat(sprintf("... %d more %s%s; use get_LV() to extract the full matrix.\n",
+                  n_more, what, if (n_more == 1) "" else "s"))
+    }
+  }
+
+  cat("Reduced-rank Generalised Dissimilarity Model (rrGDM)\n\n")
+  cat("Call:\n", paste(deparse(x$call), collapse = "\n"), "\n", sep = "")
+
+  # General model info
+  cli::cli_h2("Model")
+
+  mean_lab <- if (n_env > 0) format_formula(stats::formula(x$terms_fix)) else "none (no predictors)"
+  re_lab <- if (has_random) paste0("(1 | ", x$re_vars, ")", collapse = " + ") else "none"
+  sd_lab <- if (has_sample_re) format_formula(stats::formula(x$terms_sd)) else "none (no sample-level errors)"
+  con_lab <- switch(as.character(x$constraint),
+                    "0" = "none",
+                    "1" = "lambda (lower triangular)",
+                    "2" = "u (lower triangular)",
+                    as.character(x$constraint))
+
+  show("Method:", "maximum likelihood (Laplace approximation, TMB)")
+  show("Family:", x$family)
+  show("Link:", x$link)
+  show("Latent dimensions:", x$k)
+  show("Samples (pairs):", sprintf("%d (%d)", nrow(x$X_design), length(x$Y_diss)))
+  show("Fixed effects:", mean_lab)
+  show("Random effects:", re_lab)
+  show("Dispersion model:", sd_lab)
+  show("Identifiability:", con_lab)
+
+  # Convergence info
+  cli::cli_h2("Convergence")
+
+  pd_hess <- if (is.null(x$sd_rep)) {
+    "not computed"
+  } else if (isTRUE(x$sd_rep$pdHess)) {
+    "yes"
+  } else {
+    "NO"
+  }
+
+  max_grad <- x$sd_rep$gradient.fixed
+  grad_lab <- if (is.null(max_grad)) "not computed" else formatC(max(abs(max_grad)), digits = 2, format = "e")
+
+  show("nlminb code:", sprintf("%s (%s)", x$opt$convergence, x$opt$message))
+  show("Hessian pos. definite:", pd_hess)
+  show("Max |gradient|:", grad_lab)
+
+  # Loadings
+  cli::cli_h2("Environmental loadings (lambda)")
+  if (nrow(lv$lambda) > 0) {
+    print(lv$lambda, digits = digits)
+  } else {
+    cli::cli_alert_info("No predictors in the mean model.")
+  }
+
+  # Sample error
+  cli::cli_h2("Sample-level errors (u)")
+  if (!has_sample_re) {
+    cli::cli_alert_info("Sample-level errors not included in the model.")
+  } else {
+    print_head(lv$u_sample, "sample")
+  }
+
+  # Random effects
+  if (has_random) {
+    cli::cli_h2("Random effects (u)")
+    if (is.null(lv$u_re)) {
+      cli::cli_alert_info("Random effects not found in the model report.")
+    } else {
+      u_re <- lv$u_re
+      # One block per grouping variable (rows of u_re follow x$map_re)
+      grp <- if (length(x$map_re) == nrow(u_re)) x$map_re else rep(1L, nrow(u_re))
+
+      for (v in seq_along(x$re_vars)) {
+        u_v <- u_re[grp == v, , drop = FALSE]
+        if (nrow(u_v) == 0) next
+        cat(sprintf("(1 | %s): %d group%s\n", x$re_vars[v], nrow(u_v), if (nrow(u_v) == 1) "" else "s"))
+        print_head(u_v, "group")
+      }
+    }
+  }
+
+  cat("\nUse summary() for Wald tests, dispersion effects and fit statistics.\n")
+  invisible(x)
 }
 
 
