@@ -253,13 +253,4 @@ $\boldsymbol{\Lambda}$), while the size of each ellipse shows how
 community dispersion itself changes with pH. Both effects are estimated
 jointly and are readable directly off the same ordination.
 
-### predictor effects
 
-`wald_test()` reports a multivariate Wald test per predictor on the
-environmental loadings $\boldsymbol{\Lambda}$ (jointly across all `k`
-latent dimensions), and a univariate z-tests for each predictor's effect
-on dispersion ($\boldsymbol{\beta}$):
-
-```{r}
-wald_test(m1)
-```

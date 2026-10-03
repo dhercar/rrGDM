@@ -161,6 +161,10 @@ plot(pred_Y, m1$Y_diss / m1$Y_den,
 abline(0, 1)
 
 pred_Y <- predict(m1, conditional = FALSE)[, 4]
+#> ℹ Random-effect terms such as `(1 | group)` are not included: only fixed
+#>   effects and sample-level dispersion are used.
+#> • Expected dissimilarities between samples will be understated if group-level
+#>   variance is large.
 R2_cor <-  round(cor(pred_Y, m1$Y_diss / m1$Y_den)^2,2)
 plot(pred_Y, m1$Y_diss / m1$Y_den,
      ylab = 'observed', xlab = 'predicted', main = paste0('conditional, Pseudo-R2: ', R2_cor))
@@ -197,7 +201,7 @@ latent distances against the observed dissimilarities:
 
 ``` r
 stress(m1)
-#> [1] 0.1180439
+#> [1] 0.1180447
 ```
 
 ### Visualising partial effects in ordination space
@@ -226,6 +230,10 @@ pred_ord_2 <- predict(m1,
                        sample_param = FALSE, 
                        sim_site = TRUE,   
                        n_sim = 1000)
+#> ℹ Random-effect terms such as `(1 | group)` are not included: only fixed
+#>   effects and sample-level dispersion are used.
+#> • Expected dissimilarities between samples will be understated if group-level
+#>   variance is large.
 
 # Generating preedictions
 ggplot(pred_ord_2, aes(x = L.1, y = L.2)) +
@@ -252,24 +260,3 @@ The centroids shows how expected community composition shifts
 $\boldsymbol{\Lambda}$), while the size of each ellipse shows how
 community dispersion itself changes with pH. Both effects are estimated
 jointly and are readable directly off the same ordination.
-
-### predictor effects
-
-`wald_test()` reports a multivariate Wald test per predictor on the
-environmental loadings $\boldsymbol{\Lambda}$ (jointly across all `k`
-latent dimensions), and a univariate z-tests for each predictor’s effect
-on dispersion ($\boldsymbol{\beta}$):
-
-``` r
-wald_test(m1)
-#> 
-#> ── Wald tests: environmental loadings ──
-#> 
-#>                  term       Wald Df     Pr_Chisq Sig
-#>                  pH_s 111.409526  1 4.812750e-26 ***
-#>  as.factor(Region)Kil   7.411311  2 2.458410e-02   *
-#>  as.factor(Region)NyA   1.750361  2 4.167868e-01
-#> ── Wald tests: dispersion effects ──
-#>  term  Estimate         SE        z        Pr_z Sig
-#>  pH_s 0.4560358 0.08297211 5.496253 3.87945e-08 ***
-```
