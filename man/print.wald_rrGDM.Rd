@@ -4,11 +4,14 @@
 \alias{print.wald_rrGDM}
 \title{Print method for wald_rrGDM objects}
 \usage{
-\method{print}{wald_rrGDM}(x, ...)
+\method{print}{wald_rrGDM}(x, digits = 4, ...)
 }
 \arguments{
 \item{x}{An object of class \code{wald_rrGDM}, as returned by
 \code{\link{wald_test}}.}
+
+\item{digits}{Number of significant digits for test statistics and
+effect sizes. Default is 3.}
 
 \item{...}{Currently unused.}
 }

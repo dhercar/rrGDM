@@ -18,10 +18,9 @@ wald_test(object, include_intercept = FALSE)
 A list of class \code{wald_rrGDM} with two elements:
 \itemize{
   \item \code{lambda}: a \code{data.frame} with one row per predictor in
-    \code{X_design}, with columns \code{term}, \code{Wald}, \code{Df}
-    (see Details -- \code{k} under \code{constraint \%in\% c(0, 2)},
-    \code{min(i, k)} for predictor \code{i} under \code{constraint == 1}),
-    \code{Pr_Chisq}, \code{Sig}.
+    \code{X_design} (zero rows if the mean model has no predictors), with
+    columns \code{term}, \code{Size}, \code{Wald},
+    \code{Df} (see Details), \code{Pr_Chisq}, \code{Sig}.
   \item \code{beta}: a \code{data.frame} with one row per predictor in
     \code{W_design} (excluding the intercept unless
     \code{include_intercept = TRUE}), with columns \code{term},
@@ -35,7 +34,10 @@ Wald tests for sets of predictor effects in a fitted \code{rrGDM} model:
     predictor, a multivariate (multi-df) Wald test of the null that all
     free loadings of that predictor (one per latent dimension) are jointly zero.
     This accounts for the potential covariance between
-    loadings within a predictor.
+    loadings within a predictor. The \code{Size} column gives the
+    modulus (Euclidean norm) of the loading vector across the \code{k}
+    latent dimensions, a rotation-invariant measure of the predictor's
+    total effect on community composition.
   \item \strong{Dispersion effects} (\code{beta}): for each predictor in
     the dispersion model, a univariate Wald z-test, since each
     coefficient is a scalar effect on \eqn{\log(\tau)}.
@@ -44,11 +46,14 @@ Wald tests for sets of predictor effects in a fitted \code{rrGDM} model:
 \details{
 This test is preferred over testing each latent dimension separately
 (e.g., with per-dimension p-values corrected for multiple comparisons),
-because it explicitly accounts for the covariance between loadings
-If \eqn{\boldsymbol{\Sigma}_p} is computationally singular, its inverse
-is replaced by the Moore-Penrose pseudoinverse via \code{\link[MASS]{ginv}},
-which computes it from a singular value decomposition, treating singular
-values below \code{MASS::ginv}'s default numerical tolerance as zero.
+because it explicitly accounts for the covariance between loadings.
+If the covariance matrix \eqn{\boldsymbol{\Sigma}_p} of a predictor's
+loadings is singular or ill-conditioned (judged on the correlation scale, so
+independently of the units of the coefficients; reciprocal condition number
+below \code{1e-8}), the Wald statistic and p-value for that predictor are set
+to \code{NA} with a warning. This typically indicates unidentified or nearly
+collinear coefficients, for which the test is not meaningful. If the Hessian
+at the optimum was not positive definite, the function stops with an error.
 
 The degrees of freedom of the \code{lambda} test depend on
 \code{object$constraint}:

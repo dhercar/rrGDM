@@ -10,32 +10,44 @@ stress(object, type = c("nonmetric", "metric"), scale = c("link", "response"))
 \item{object}{A fitted object of class \code{rrGDM}.}
 
 \item{type}{Character string: \code{"nonmetric"} (default) computes
-disparities via isotonic (monotone) regression, as in standard
-Kruskal / NMDS stress. \code{"metric"} uses linear regression instead.}
+Kruskal's stress-1 using isotonic regression, as in standard NMDS.
+\code{"metric"} compares observed and model-implied dissimilarities
+directly (see Description).}
 
 \item{scale}{Character string: \code{"link"} (default) uses the raw
-Euclidean distance between fitted latent positions in ordination,
-Generally the only scale on which stress values from RRGDM and other
-methods (e.g., (\code{vegan::metaMDS, MASS::isoMDS}))
-should be compared directly.
-\code{"response"} instead uses the link-transformed expected
-dissimilarity (\code{object$inv_link(dist)}), which is on the same
-scale as the observed dissimilarities used to fit the model (e.g.
-[0,1]-bounded for indices like Bray-Curtis or Jaccard, unbounded for
-metrics like Euclidean). This is a useful descriptive goodness-of-fit
-on the response/dissimilarity scale.}
+Euclidean distance between fitted latent positions in the ordination.
+This is generally the only scale on which stress values from RRGDM and
+other methods (e.g., \code{vegan::metaMDS}, \code{MASS::isoMDS}) should be
+compared directly. \code{"response"} instead uses the inverse-link
+transformed expected dissimilarity (\code{object$inv_link(dist)}), which is
+on the same scale as the observed dissimilarities used to fit the model.
+This is the appropriate scale for \code{type = "metric"}.}
 }
 \value{
-A single numeric value: the stress, bounded between 0 (best) and 1 (worst).
+A single numeric value: the stress.
 }
 \description{
 Computes a goodness-of-fit "stress" statistic for a fitted \code{rrGDM}
 object, comparing the observed dissimilarities used to fit the model
-against a model-implied quantity: either the raw Euclidean distance
-between fitted latent positions (\code{scale = "link"}), or the
-link-transformed expected dissimilarity (\code{scale = "response"}),
+against a model-implied quantity computed from the conditional latent
+coordinates (i.e., including sample-level errors): either the raw Euclidean
+distance between fitted latent positions (\code{scale = "link"}), or the
+inverse-link-transformed expected dissimilarity (\code{scale = "response"}).
+
+For \code{type = "nonmetric"}, this is Kruskal's stress-1,
 \deqn{Stress = \sqrt{\frac{\sum (\hat{d} - D)^2}{\sum D^2}}}
 where \eqn{D} is the chosen model-implied quantity and \eqn{\hat{d}}
-("disparities") is a transformation of the observed dissimilarities
-regressed onto \eqn{D}. Returned as a percentage.
+("disparities") is the isotonic (monotone) regression of \eqn{D} on the
+observed dissimilarities.
+
+For \code{type = "metric"}, observed and model-implied dissimilarities are
+compared directly, with no regression step:
+\deqn{Stress = \sqrt{\frac{\sum (y_{ij} - \hat{y}_{ij})^2}{\sum y_{ij}^2}}}
+where \eqn{y_{ij}} are the observed dissimilarities and \eqn{\hat{y}_{ij}}
+the model-implied ones. Because it does not allow for a linear
+recalibration, it also penalises a poorly calibrated link. This is not
+directly comparable to the stress reported by NMDS software.
+
+Stress is returned as a proportion between 0 (best) and 1 (worst) for
+bounded dissimilarities.
 }

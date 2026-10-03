@@ -20,7 +20,7 @@ rrGDM(
   constraint = 1,
   trans = function(x) x,
   seed = NULL,
-  init_jitter = 0.001,
+  init_jitter = 0.01,
   n_starts = 1,
   init_method = "dbRDA",
   trace = FALSE,
@@ -60,7 +60,7 @@ rrGDM(
 
 \item{init_jitter}{Numeric. A small standard deviation used to jitter initial parameter values.}
 
-\item{init_method}{A character string specifying a method used to obtain initial values for optimisation. Currently, only \code{init_method = 'PCOA'} available.}
+\item{init_method}{A character string specifying a method used to obtain initial values for optimisation. Currently, only \code{'PCOA'} and \code{'dbRDA'} available.}
 
 \item{control}{A list of control parameters passed to stats::nlminb}
 }

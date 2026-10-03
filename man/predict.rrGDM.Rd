@@ -44,6 +44,8 @@ in the latent space. Defaults to \code{"response"}.}
 \item{probs}{Numeric vector of probabilities for calculating quantiles from
 the simulated distribution. Defaults to \code{c(0.025, 0.5, 0.975)}.}
 
+\item{conditional}{Logical. If \code{TRUE}, returns predictions from the fitted (conditional) latent positions of the samples used to fit the model, including sample-level and random-effect deviations. Only available when \code{X_new = NULL}. Defaults to \code{FALSE}.}
+
 \item{...}{not used}
 }
 \value{
