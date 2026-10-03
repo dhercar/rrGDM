@@ -133,25 +133,10 @@ summary.rrGDM <- function(object, ...) {
   scale_df <- NULL
 
   if (!is.null(scale_name)) {
-    scale_est <- NA_real_
-    scale_se <- NA_real_
-
-    if (has_se) {
-      sc_idx <- which(names(sd_rep$value) == scale_name)
-      if (length(sc_idx) == 1) {
-        scale_est <- as.numeric(sd_rep$value[sc_idx])
-        scale_se <- as.numeric(sd_rep$sd[sc_idx])
-      }
-    }
-
-    if (is.na(scale_est)) { # fall back on the optimiser's estimate
-      log_scale <- object$opt$par[names(object$opt$par) == "log_scale"]
-      if (length(log_scale) == 1) scale_est <- exp(as.numeric(log_scale))
-    }
-
+    log_scale <- object$opt$par[names(object$opt$par) == "log_scale"]
     scale_df <- data.frame(
       term = scale_name,
-      Estimate = scale_est,
+      Estimate = if (length(log_scale) == 1) exp(as.numeric(log_scale)) else NA_real_,
       stringsAsFactors = FALSE)
   }
 
@@ -257,11 +242,6 @@ print.summary.rrGDM <- function(x, digits = 4, ...) {
     cli::cli_h2("Pairwise (observation-level) error")
     d <- x$scale_par
     d$Estimate <- fmt_num(d$Estimate)
-    if (x$has_se) {
-      d$SE <- fmt_num(d$SE)
-    } else {
-      d <- d[, c("term", "Estimate"), drop = FALSE]
-    }
     print(d, row.names = FALSE, right = TRUE)
   }
 
