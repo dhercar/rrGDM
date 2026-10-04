@@ -11,6 +11,11 @@
 #' If \code{QR = TRUE}, rotates the site loading matrix to be lower triangular
 #' with positive diagonal, and applies the same rotation to the environmental
 #' loadings so that \code{X \%*\% lambda + u_sample} is unchanged.
+#' Predictors are centred internally for the projection (not scaled), so the
+#' starting values do not depend on the location of the predictors. As a
+#' consequence, \code{X \%*\% lambda + u_sample}, computed with the original
+#' (uncentred) \code{X}, equals the PCoA scores up to a constant shift common to
+#' all sites, which does not affect pairwise distances.
 #'
 #' @param Y A \code{matrix} of community data (sites x species).
 #' @param X_design If provided, a model \code{matrix} of predictors.
@@ -114,6 +119,7 @@ initial_loadings <- function(Y,
   # ------------------------------------ RDA ------------------
   if (has_X) {
     X_mat <- as.matrix(X_design)
+    X_mat <- sweep(X_mat, 2, colMeans(X_mat), "-")
     qx <- qr(X_mat)
 
     U_fitted <- qr.fitted(qx, U_pcoa)
@@ -138,26 +144,26 @@ initial_loadings <- function(Y,
   # -------------ROTATE TO MEET CONTRAINTS 1 OR 2 ------------------
   if (QR && k > 1) {
     if (constraint == 1) {
-     # Rotate lambda to lower tri, and apply rot. to u_sample
-     p_lambda <- nrow(lambda_raw)
-     rank_r <- min(k, p_lambda) # deals with the case of p < k
+      # Rotate lambda to lower tri, and apply rot. to u_sample
+      p_lambda <- nrow(lambda_raw)
+      rank_r <- min(k, p_lambda) # deals with the case of p < k
 
-     qr_decomp <- qr(t(lambda_raw))
-     Q_full <- qr.Q(qr_decomp, complete = TRUE)
-     R_econ <- qr.R(qr_decomp)
+      qr_decomp <- qr(t(lambda_raw))
+      Q_full <- qr.Q(qr_decomp, complete = TRUE)
+      R_econ <- qr.R(qr_decomp)
 
-     # If p < lambda, pad R with 0s
-     if (k > p_lambda) {
-       R_full <- rbind(R_econ, matrix(0, k - p_lambda, p_lambda))
-     } else {
-       R_full <- R_econ
-     }
+      # If p < lambda, pad R with 0s
+      if (k > p_lambda) {
+        R_full <- rbind(R_econ, matrix(0, k - p_lambda, p_lambda))
+      } else {
+        R_full <- R_econ
+      }
 
-     sign_vec <- rep(1, k)
-     sign_vec[seq_len(rank_r)] <- sign2(diag(R_econ))
+      sign_vec <- rep(1, k)
+      sign_vec[seq_len(rank_r)] <- sign2(diag(R_econ))
 
-     lambda_final <- sweep(t(R_full), 2, sign_vec, "*")
-     u_final <- sweep(u_raw %*% Q_full, 2, sign_vec, "*")
+      lambda_final <- sweep(t(R_full), 2, sign_vec, "*")
+      u_final <- sweep(u_raw %*% Q_full, 2, sign_vec, "*")
 
     } else if (constraint == 2) {
       # Rotate u_sample to lower tri, apply rot. to lambda
