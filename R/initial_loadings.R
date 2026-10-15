@@ -73,18 +73,14 @@ initial_loadings <- function(Y,
   # Compute fill diss. matrix, ignoring num_den specifications (e.g., for binomial family)
   D <- as.matrix(vegan::vegdist(Y, method = dist_method, binary = binary))
 
-  # Cap 1s to avoid crash
+  if (link %in% c("negexp", "neggaus")) {
+    off_diag <- row(D) != col(D)                       # diagonal stays exactly 0
+    D[off_diag] <- scale_dist(pmin(D[off_diag], 1), c(0.001, 0.990))
+  }
+
   D_linear <- switch(link,
-                     negexp  = {
-                       d_max <- max(D[D < 1], 0)                          # largest non-1 dissimilarity
-                       d_cap <- max(0.99, d_max + 0.5 * (1 - d_max))      # whichever is larger
-                       D_safe <- ifelse(D >= 1, d_cap, D)
-                       - log(1 - D_safe)},
-                     neggaus = {
-                       d_max <- max(D[D < 1], 0)
-                       d_cap <- max(0.99, d_max + 0.5 * (1 - d_max))
-                       D_safe <- ifelse(D >= 1, d_cap, D)
-                       sqrt(-log(1 - D_safe))},
+                     negexp   = -log(1 - D),
+                     neggaus  = sqrt(-log(1 - D)),
                      identity = D,
                      cli::cli_abort("Link {.val {link}} is not supported."))
 
@@ -118,6 +114,15 @@ initial_loadings <- function(Y,
 
   # ------------------------------------ RDA ------------------
   if (has_X) {
+    # Centre the predictors (centre only, do not scale) before projecting.
+    # X_design has no intercept column and is NOT centred, but the PCoA scores
+    # have column means of zero. Without centring, the projection is a regression
+    # through the origin: for a predictor with mean m and variance v, the slope is
+    # shrunk by ~ v / (v + m^2) (e.g. x in [100, 200] -> ~3.6% of the right value),
+    # and the effect ends up in u_sample. Centring makes it equivalent to a
+    # regression WITH an intercept. Slopes are unchanged by centring, so
+    # lambda_raw is the lambda the model uses with the uncentred X, and the
+    # residuals have mean zero, as the N(0, tau^2) prior on u_sample expects.
     X_mat <- as.matrix(X_design)
     X_mat <- sweep(X_mat, 2, colMeans(X_mat), "-")
     qx <- qr(X_mat)
