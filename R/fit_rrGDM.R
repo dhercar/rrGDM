@@ -16,6 +16,8 @@
 #' @param sample_error Logical. If TRUE, includes site-level random effects to account for variation not explained by predictors.
 #' @param seed An integer specifying the seed for random number generation. Default is NULL.
 #' @param init_jitter Numeric. A small standard deviation used to jitter initial parameter values.
+#' @param previous_best Logical. Controls where the jitter for multiple starts after the first is applied
+#' If \code{TRUE} (default), each start jitters around the best solution found so far (perturb-and-reoptimise). If \code{FALSE}, every start jitters around the initial values (from \code{init_method}), so starts do not depend on earlier fits. Only relevant when \code{n_starts > 1}.
 #' @param init_method A character string specifying a method used to obtain initial values for optimisation. Currently, only \code{'PCOA'} and \code{'dbRDA'} available.
 #' @param control A list of control parameters passed to stats::nlminb
 #' @return An object of class 'rrGDM' containing the fitted model object, the optimized parameters, and other relevant information.
@@ -40,6 +42,7 @@ rrGDM <- function(Y,
                   seed = NULL,
                   init_jitter = 0.01,
                   n_starts = 1,
+                  previous_best = TRUE,
                   init_method = 'dbRDA',
                   trace = FALSE,
                   control = list()) {
@@ -51,6 +54,10 @@ rrGDM <- function(Y,
   if (!is.null(scale_diss) && (family %in% c('binomial','beta.binomial'))) {
     cli::cli_warn("Ignoring scale_diss for binomial and beta-binomial families ")
     scale_diss <- NULL
+  }
+
+  if (!is.logical(previous_best) || length(previous_best) != 1 || is.na(previous_best)) {
+    cli::cli_abort("{.arg previous_best} must be either TRUE or FALSE.")
   }
 
   # ---------- DATA PREP ----------
@@ -225,16 +232,25 @@ rrGDM <- function(Y,
   best_fit  <- NULL
 
   re_idx <- obj$env$random   # positions of random effects in the full par. vector
-  base_fixed <- obj$par     # fixed-effect baseline
-  base_re <- if (length(re_idx) > 0) obj$env$last.par.best[re_idx] else numeric(0)  # RE baseline
+
+  # Initial values: never modified. Jitter centre when previous_best = FALSE
+  init_fixed <- obj$par
+  init_re <- if (length(re_idx) > 0) obj$env$last.par.best[re_idx] else numeric(0)
+  base_fixed <- init_fixed
+  base_re <- init_re
 
   for (i in seq_len(n_starts)) {
+    # apply jitter: best fit so far, or the initial values
+    centre_fixed <- if (previous_best) base_fixed else init_fixed
+    centre_re <- if (previous_best) base_re else init_re
+
     if (length(re_idx) > 0) {
-      re_start <- if (i == 1) base_re else base_re + rnorm(length(re_idx), 0, init_jitter)
+      re_start <- if (i == 1) centre_re else centre_re + rnorm(length(re_idx), 0, init_jitter)
       obj$env$last.par.best[re_idx] <- re_start
       obj$env$last.par[re_idx]      <- re_start
     }
-    start <- if (i == 1) base_fixed else base_fixed + rnorm(length(base_fixed), 0, init_jitter)
+    obj$env$value.best <- Inf
+    start <- if (i == 1) centre_fixed else centre_fixed + rnorm(length(centre_fixed), 0, init_jitter)
     fit <- tryCatch(
       stats::nlminb(start = start,
                     objective = obj$fn,
@@ -267,6 +283,7 @@ rrGDM <- function(Y,
     obj$env$last.par[re_idx]  <- base_re
   }
 
+  obj$env$value.best <- Inf
   obj$fn(best_fit$par) # update objective (see * below)
   best_par <- obj$env$last.par # snapshot before sdrep
 
