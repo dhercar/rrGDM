@@ -8,6 +8,7 @@
 #' @param constraint Integer. Specifies identifiability constraints. 1: Constraint applied to environmental loadings matrix (\eqn{\Lambda}); 2: Constraint applied to site random effects matrix (U). Default is 1.
 #' @param dist_method A character string specifying the distance method to be used (e.g., "euclidean", "bray"). Default is "bray".
 #' @param trans Function used to transform the response matrix before computing dissimilarities (e.g., log, sqrt). Default is no transformation.
+#' @param sparse Optional object of class \code{sparse_diss} (see \code{\link{sparse_diss}}). If supplied, the model is fitted using only the pairs of samples listed in \code{sparse$edges}, instead of all pairs. It must be created from the same samples as \code{Y}. Default is NULL (all pairs).
 #' @param binary Logical indicating whether the response variable should be treated as binary (e.g., presence-absence). Default is FALSE.
 #' @param scale_diss A numeric vector of length two indicating a new scale for dissimilarities. Useful for distributions bounded between 0 and 1 (e.g., beta family)
 #' @param family A character string specifying the family of the response variable (e.g., "beta", "binomial"). Default is "gaussian".
@@ -18,7 +19,8 @@
 #' @param init_jitter Numeric. A small standard deviation used to jitter initial parameter values.
 #' @param previous_best Logical. Controls where the jitter for multiple starts after the first is applied
 #' If \code{TRUE} (default), each start jitters around the best solution found so far (perturb-and-reoptimise). If \code{FALSE}, every start jitters around the initial values (from \code{init_method}), so starts do not depend on earlier fits. Only relevant when \code{n_starts > 1}.
-#' @param init_method A character string specifying a method used to obtain initial values for optimisation. Currently, only \code{'PCOA'} and \code{'dbRDA'} available.
+#' @param init_method A character string specifying a method used to obtain initial values for optimisation. Currently, only \code{'PCOA'} and \code{'dbRDA'} available. Ignored if \code{start_fit} is supplied.
+#' @param start_fit Optional fitted \code{rrGDM} model used to initialise the optimisation (e.g., a fast sparse fit before refitting with more pairs). It must have the same samples, \code{k}, \code{family}, \code{link}, \code{constraint}, predictors and random-effect structure as the new model; the set of pairs (\code{sparse}) may differ. If supplied, \code{init_method} is ignored. Default is NULL.
 #' @param control A list of control parameters passed to stats::nlminb
 #' @return An object of class 'rrGDM' containing the fitted model object, the optimized parameters, and other relevant information.
 #' @importFrom TMB MakeADFun sdreport
@@ -39,11 +41,13 @@ rrGDM <- function(Y,
                   sample_error = TRUE,
                   constraint = 1,
                   trans = function(x) x,
+                  sparse = NULL,
                   seed = NULL,
                   init_jitter = 0.01,
                   n_starts = 1,
                   previous_best = TRUE,
                   init_method = 'dbRDA',
+                  start_fit = NULL,
                   trace = FALSE,
                   control = list()) {
 
@@ -73,16 +77,16 @@ rrGDM <- function(Y,
 
   if (is.null(link)) {
     link <- switch(family,
-                       "gaussian" = 'identity',
-                       "binomial" = 'negexp',
-                       "beta" = 'negexp',
-                       "beta.binomial" = 'negexp')
+                   "gaussian" = 'identity',
+                   "binomial" = 'negexp',
+                   "beta" = 'negexp',
+                   "beta.binomial" = 'negexp')
   }
 
   link_idx <- switch(link,
-                    "identity" = 0,
-                    "negexp" = 1,
-                    "neggaus" = 2,
+                     "identity" = 0,
+                     "negexp" = 1,
+                     "neggaus" = 2,
                      cli::cli_abort("Link not supported"))
 
 
@@ -93,10 +97,19 @@ rrGDM <- function(Y,
                       method = dist_method,
                       num_den = (family %in% c('binomial', 'beta.binomial')))
   if (anyNA(Y_df)) cli::cli_abort("Dissimilarities computed with {.val {dist_method}} contain missing values.")
+
+  obs_full <- NULL
+  if (!is.null(sparse)) {
+    obs_full <- scale_dist(Y_df[, 3], sort(scale_diss))
+    if (family %in% c('binomial', 'beta.binomial')) obs_full <- obs_full / as.numeric(Y_df[, 4])
+    Y_df <- subset_pairs(Y_df, sparse, n = nrow(Y), id = rownames(Y), dist_method = dist_method)
+  }
+
+
   D_mat <- Y_df[, c(1,2)]  # Design matrix (row col pairs)
   Y_val <- Y_df[,3]  # Dissimilarity value (or n unshared species if num_den type of dissimilarity)
   Y_val <- scale_dist(Y_val, sort(scale_diss))  # re-scale between set interval, if defined by user (bypassed if NULL)
-  Y_den  <- if (family %in% c('binomial', 'beta.binomial')) as.numeric(Y_df[, 4]) else rep(1, length(Y_val)) # Denominator (used in binomial and beta-binomial)
+  Y_den <- if (family %in% c('binomial', 'beta.binomial')) as.numeric(Y_df[, 4]) else rep(1, length(Y_val)) # Denominator (used in binomial and beta-binomial)
 
   # Prep predictors
   data_design <- prepare_data(formula = formula,
@@ -149,8 +162,28 @@ rrGDM <- function(Y,
   if (sample_error == FALSE) parameters$u_sample <- matrix(0, nrow = 1, ncol = 1)
 
   # ---------- GOOD INITS -------------
+  if (!is.null(start_fit)) {
 
-  if (!is.null(init_method) && init_method %in% c('PCOA', 'dbRDA')) {
+    if (!inherits(start_fit, 'rrGDM')) cli::cli_abort("{.arg start_fit} must be a fitted {.cls rrGDM} model.")
+    if (start_fit$k != k || start_fit$family != family || start_fit$link != link || start_fit$constraint != constraint) {
+      cli::cli_abort("{.arg start_fit} must have the same {.arg k}, {.arg family}, {.arg link} and {.arg constraint} as the new model.")
+    }
+    if (nrow(start_fit$Y) != n_samples ||
+        (!is.null(rownames(Y)) && !identical(rownames(start_fit$Y), rownames(Y)))) {
+      cli::cli_abort("{.arg start_fit} must be fitted to the same samples (same order) as {.arg Y}.")
+    }
+
+    # All parameters of the previous fit, including random-effect modes
+    start_par <- start_fit$obj$env$parList(start_fit$opt$par, start_fit$best_par)
+
+    for (nm in names(parameters)) {
+      if (length(start_par[[nm]]) != length(parameters[[nm]])) {
+        cli::cli_abort("{.arg start_fit} has a different number of {.field {nm}} (predictors, {.arg sample_error} or random effects differ).")
+      }
+      parameters[[nm]][] <- as.vector(start_par[[nm]])  # keep the dimensions of the new object
+    }
+
+  } else if (!is.null(init_method) && init_method %in% c('PCOA', 'dbRDA')) {
 
     cli::cli_process_start(paste0('Finding initial parameters (', init_method, ')'))
 
@@ -174,6 +207,31 @@ rrGDM <- function(Y,
     if (!is.null(loadings$lambda_init)) {
       parameters$lambda <- parameters$lambda + as.matrix(loadings$lambda_init)
     }
+
+    if (family %in% c('beta', 'beta.binomial')) {
+      L <- matrix(0, n_samples, k)
+      if (sample_error) L <- L + parameters$u_sample
+      if (n_env > 0)    L <- L + as.matrix(data_design$X_design) %*% parameters$lambda
+      pr <- as.matrix(D_mat)
+      d  <- sqrt(rowSums((L[pr[, 1], , drop = FALSE] - L[pr[, 2], , drop = FALSE])^2))
+      mu <- pmin(pmax(switch(link, identity = d, negexp = 1 - exp(-d), neggaus = 1 - exp(-d^2)), 1e-3), 1 - 1e-3)
+
+      if (family == 'beta.binomial') {
+        ok  <- Y_den > 1
+        z   <- (Y_val[ok] - Y_den[ok] * mu[ok])^2 / (Y_den[ok] * mu[ok] * (1 - mu[ok]))
+        rho <- sum(z - 1) / sum(Y_den[ok] - 1)
+      } else {
+        z   <- (Y_val - mu)^2 / (mu * (1 - mu))
+        rho <- mean(z)
+      }
+      if (is.finite(rho)) { # ignore if there are non-finite values
+        rho <- min(max(rho, 1e-4), 0.99)
+        parameters$log_scale <- log(1 / rho - 1)
+      } else {
+        cli::cli_text('Moment matching produced non-infinite values')
+      }
+    }
+
     cli::cli_process_done()
   }
 
@@ -239,6 +297,10 @@ rrGDM <- function(Y,
   base_fixed <- init_fixed
   base_re <- init_re
 
+  # First fit with higher tolerance for faster convergence (not when warm-starting from a previous fit):
+  control_first <- control_def
+  if (n_starts > 1 && is.null(control$rel.tol) && is.null(start_fit)) control_first$rel.tol <- 1e-7
+
   for (i in seq_len(n_starts)) {
     # apply jitter: best fit so far, or the initial values
     centre_fixed <- if (previous_best) base_fixed else init_fixed
@@ -255,7 +317,7 @@ rrGDM <- function(Y,
       stats::nlminb(start = start,
                     objective = obj$fn,
                     gradient = obj$gr,
-                    control = control_def),
+                    control = if (i == 1) control_first else control_def),
       error = function(e) list(objective = Inf, par = start))
 
     if (is.finite(fit$objective) && fit$objective < best_obj) {
@@ -304,6 +366,9 @@ rrGDM <- function(Y,
     X = X,
     Y_diss = Y_val,
     Y_den = Y_den,
+    pairs = as.matrix(D_mat),
+    sparse = sparse,
+    obs_full = obs_full,
     X_design = data_design$X_design,
     W_design = data_design$W_design,
     Z_design = data_design$Z_design,
@@ -312,7 +377,7 @@ rrGDM <- function(Y,
     opt = best_fit,
     obj = obj,
     sd_rep = sd_rep,
-    best_par = best_par, # *good last par from call above
+    best_par = best_par,
     k = k,
     family = family,
     link = link,
@@ -425,7 +490,12 @@ print.rrGDM <- function(x, digits = 3, n_u = 5, ...) {
   show("Family:", x$family)
   show("Link:", x$link)
   show("Latent dimensions:", x$k)
-  show("Samples (pairs):", sprintf("%d (%d)", nrow(x$X_design), length(x$Y_diss)))
+  n_all <- choose(nrow(x$X_design), 2)
+  show("Samples (pairs):", if (is.null(x$sparse)) {
+    sprintf("%d (%d)", nrow(x$X_design), length(x$Y_diss))
+  } else {
+    sprintf("%d (%d; sparse, %.1f%% of all pairs)", nrow(x$X_design), length(x$Y_diss), 100 * length(x$Y_diss) / n_all)
+  })
   show("Fixed effects:", mean_lab)
   show("Random effects:", re_lab)
   show("Dispersion model:", sd_lab)
@@ -487,6 +557,3 @@ print.rrGDM <- function(x, digits = 3, n_u = 5, ...) {
   cat("\nUse summary() for Wald tests, dispersion effects and fit statistics.\n")
   invisible(x)
 }
-
-
-

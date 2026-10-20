@@ -62,3 +62,58 @@ get_report <- function(object) object$obj$report(object$best_par)
 #' @noRd
 format_formula <- function(f) paste(trimws(deparse(f)), collapse = " ")
 
+
+
+
+#' Subset a long data frame of dissimilarities to the pairs in a sparse_diss object (internal)
+#' @noRd
+subset_pairs <- function(Y_df, sparse, n, id = NULL, dist_method = NULL) {
+  if (!inherits(sparse, "sparse_diss")) {
+    cli::cli_abort("{.arg sparse} must be a {.cls sparse_diss} object (see {.fn sparse_diss}), not a {.cls {class(sparse)}}.")
+  }
+  if (sparse$n_samples != n) {
+    cli::cli_abort(c(
+      "x" = "{.arg sparse} and {.arg Y} must have the same samples.",
+      "i" = "{.arg sparse} was created from {sparse$n_samples} sample{?s}; {.arg Y} has {n}."
+    ))
+  }
+  if (!is.null(id) && !identical(as.character(id), as.character(sparse$id))) {
+    cli::cli_abort(c(
+      "x" = "Row names of {.arg Y} differ from those of the data used to create {.arg sparse}.",
+      "i" = "Samples must be in the same order."
+    ))
+  }
+  if (!is.null(dist_method) && !(sparse$dist_method %in% c(dist_method, "user-supplied dist"))) {
+    cli::cli_warn(c(
+      "!" = "{.arg sparse} was created with {.code dist_method = {.val {sparse$dist_method}}}, but the model uses {.val {dist_method}}.",
+      "i" = "Pairs were selected using a different dissimilarity."
+    ))
+  }
+  if (sparse$n_components > 1) {
+    cli::cli_warn(c(
+      "!" = "The pairs in {.arg sparse} form {sparse$n_components} disconnected groups of samples.",
+      "i" = "Their relative positions in the latent space are not constrained. Consider a larger {.arg n_random} in {.fn sparse_diss}."
+    ))
+  }
+
+  key_all <- (Y_df$s1 - 1) * n + Y_df$s2
+  key_sparse <- (sparse$edges[, 1] - 1) * n + sparse$edges[, 2]
+  keep <- match(key_sparse, key_all)
+
+  if (anyNA(keep)) {
+    cli::cli_abort("Some pairs in {.arg sparse} could not be found in the dissimilarities. Was it created from a different {.arg Y}?")
+  }
+
+  Y_df[keep, , drop = FALSE]
+}
+
+#' Observed and modelled distances
+#' @noRd
+fit_pairs <- function(object, L_hat) {
+  obs <- if (is.null(object$sparse) || is.null(object$obs_full)) {
+    object$Y_diss / object$Y_den
+  } else {
+    object$obs_full
+  }
+  list(obs = obs, dist = as.vector(stats::dist(L_hat)))
+}

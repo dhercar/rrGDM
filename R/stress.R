@@ -70,7 +70,8 @@ stress <- function(object,
     ))
   }
 
-  raw_dist <- stats::dist(L_hat)
+  fp <- fit_pairs(object, L_hat)
+  raw_dist <- fp$dist
 
   fit_vec <- if (scale == "link") {
     as.vector(raw_dist)
@@ -78,7 +79,7 @@ stress <- function(object,
     as.vector(object$inv_link(raw_dist))
   }
 
-  obs_vec <- object$Y_diss / object$Y_den
+  obs_vec <- fp$obs
 
   if (length(obs_vec) != length(fit_vec)) {
     cli::cli_abort(c(

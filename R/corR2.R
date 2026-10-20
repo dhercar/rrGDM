@@ -42,8 +42,9 @@ cor_r2 <- function(object, message = TRUE) {
   }
 
   # Conditional fitted dissimilarities (same pair order as Y_diss)
-  fit_vec <- as.vector(object$inv_link(stats::dist(L_hat)))
-  obs_vec <- object$Y_diss / object$Y_den
+  fp <- fit_pairs(object, L_hat)
+  fit_vec <- as.vector(object$inv_link(fp$dist))
+  obs_vec <- fp$obs
 
   if (length(obs_vec) != length(fit_vec)) {
     cli::cli_abort(c(
