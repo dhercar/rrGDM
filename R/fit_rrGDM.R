@@ -43,7 +43,7 @@ rrGDM <- function(Y,
                   trans = function(x) x,
                   sparse = NULL,
                   seed = NULL,
-                  init_jitter = 0.01,
+                  init_jitter = 0.1,
                   n_starts = 1,
                   previous_best = TRUE,
                   init_method = 'dbRDA',
@@ -276,9 +276,9 @@ rrGDM <- function(Y,
     parameters = parameters,
     DLL = 'rrGDM',
     random = c('u', 'u_sample'),
+    random.start = expression(last.par[random]),
     silent = !trace,
-    map = mapping
-  )
+    map = mapping)
 
   # ------------- OPTIMISE --------------
   control_def <- list(iter.max = 1000)   # nlminb higher iter.max
@@ -286,12 +286,16 @@ rrGDM <- function(Y,
 
   # optimise
   cli::cli_process_start('optimisation')
-  best_obj  <- Inf
-  best_fit  <- NULL
 
-  re_idx <- obj$env$random   # positions of random effects in the full par. vector
+  best_obj <- Inf
+  best_fit <- NULL
+  ok_obj <- Inf
+  ok_fit <- NULL
+  ok_re <- NULL
+  ok_H <- NULL
+  re_idx <- obj$env$random
 
-  # Initial values: never modified. Jitter centre when previous_best = FALSE
+  # Initial values
   init_fixed <- obj$par
   init_re <- if (length(re_idx) > 0) obj$env$last.par.best[re_idx] else numeric(0)
   base_fixed <- init_fixed
@@ -311,6 +315,7 @@ rrGDM <- function(Y,
       obj$env$last.par.best[re_idx] <- re_start
       obj$env$last.par[re_idx]      <- re_start
     }
+
     obj$env$value.best <- Inf
     start <- if (i == 1) centre_fixed else centre_fixed + rnorm(length(centre_fixed), 0, init_jitter)
     fit <- tryCatch(
@@ -327,6 +332,20 @@ rrGDM <- function(Y,
       base_fixed <- fit$par
       if (length(re_idx) > 0) base_re <- obj$env$last.par.best[re_idx]
     }
+
+    if (n_starts > 1 && is.finite(fit$objective) && fit$convergence == 0 && fit$objective < ok_obj) {
+      obj$env$value.best <- Inf
+      obj$fn(fit$par)  #inner modes at this optimum
+      H <- tryCatch(stats::optimHess(fit$par, obj$fn, obj$gr), error = function(e) NULL)
+      if (!is.null(H) && all(is.finite(H)) &&
+          min(eigen(H, symmetric = TRUE, only.values = TRUE)$values) > 0) {
+        ok_obj <- fit$objective
+        ok_fit <- fit
+        ok_H   <- H
+        ok_re  <- if (length(re_idx) > 0) obj$env$last.par.best[re_idx] else numeric(0)
+      }
+    }
+
     cat('model ', i, '; ', fit$objective, '\n')
   }
 
@@ -337,6 +356,19 @@ rrGDM <- function(Y,
       "x" = "Model optimisation failed for all {.arg n_starts} starting values.",
       "i" = "Try increasing {.arg n_starts}, changing {.arg init_method}, or simplifying the model."
     ))
+  }
+
+  if (n_starts > 1) {
+    if (!is.null(ok_fit)) {
+      if (ok_obj > best_obj + 1e-3) {
+        cli::cli_alert_info("Reporting the best converged fit (objective {round(ok_obj, 2)}); a lower objective ({round(best_obj, 2)}) came from a fit that did not converge to a positive-definite optimum.")
+      }
+      best_fit <- ok_fit
+      best_obj <- ok_obj
+      base_re <- ok_re
+    } else {
+      cli::cli_warn("No start converged to a positive-definite optimum: estimates and standard errors are not reliable. Try more starts, a larger {.arg init_jitter}, or a different {.arg init_method}.")
+    }
   }
 
   # Update objective environment with fixed and random for best fit
@@ -354,7 +386,9 @@ rrGDM <- function(Y,
 
   if (se == TRUE) {
     sd_rep <- tryCatch(
-      TMB::sdreport(obj, getReportCovariance = TRUE),
+      TMB::sdreport(obj,
+                    getReportCovariance = TRUE,
+                    hessian.fixed = if (n_starts > 1) ok_H),
       error = function(e) {
         cli::cli_warn('standard errors could not be computed. Hessian at optimum might not positive definite.')
         NULL
