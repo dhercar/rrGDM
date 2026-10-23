@@ -16,8 +16,10 @@
 #' @param n_random Integer. Number of random pairs per sample. Default is 3.
 #' @param max_zeros Integer or \code{Inf}. Maximum number of pairs with a
 #'   dissimilarity of exactly 0 per sample. Default is \code{Inf}.
-#' @param dist_method Dissimilarity index.
-#'   Default is \code{'bray'}.
+#' @param dist_method Dissimilarity index: a method of
+#'   \code{\link[vegan]{vegdist}} (e.g. \code{'bray'}, \code{'jaccard'},
+#'   \code{'euclidean'}); \code{'sorensen'} is Bray-Curtis on presence-absence
+#'   data. Ignored if \code{Y} is a \code{dist} object. Default is \code{'bray'}.
 #' @param trans Transformation applied to \code{Y} before calculating
 #'   dissimilarities. Default is no transformation.
 #' @param binary Logical indicating whether \code{Y} should be converted to
@@ -29,10 +31,10 @@
 #'   \code{'neggaus'}. Link function of the model to be fitted (see
 #'   \code{\link{rrGDM}}). The PCoA is computed on dissimilarities transformed to
 #'   the scale of latent distances (e.g. \code{-log(1 - diss)} for
-#'   \code{'negexp'}. Dissimilarities above 0.99 are set to 0.99). This does not
-#'   affect which pairs are selected.
-#' @param seed An integer specifying the seed for random number generation.
-#'   Default is NULL.
+#'   \code{'negexp'}), after setting dissimilarities above 0.99 to 0.99. This
+#'   does not affect which pairs are selected.
+#' @param seed An integer passed to \code{set.seed()} at the start, so it changes
+#'   the state of R's random number generator. Default is NULL (no seed is set).
 #'
 #' @return
 #' An object of class \code{sparse_diss}: a list including \code{edges}, a
@@ -41,7 +43,14 @@
 #' \code{sparse}), and \code{pairs}, a data frame with the pairs, their
 #' dissimilarity (\code{diss}) and their type (\code{'knn'}, \code{'random'}
 #' or \code{'zero'}). Each pair is stored once, with \code{s1 < s2}.
-#' \code{degree} gives the number of pairs per sample.
+#' \code{degree} gives the number of pairs per sample. The other components are
+#' the sample names (\code{id}), the number of samples and pairs (\code{n_samples},
+#' \code{n_pairs_full}, \code{n_pairs}, \code{n_zero_pairs}), the settings used
+#' (\code{knn}, \code{n_random}, \code{n_per_sample}, \code{max_zeros},
+#' \code{link}, \code{dist_method}, \code{binary}), the number of connected groups
+#' of samples (\code{n_components}), the PCoA used by \code{\link{plot.sparse_diss}}
+#' (\code{pcoa}, \code{NULL} if \code{k_pcoa = NULL}) and the matched call
+#' (\code{call}).
 #'
 #' @details
 #' Pairs are sorted by dissimilarity and kept if both samples
@@ -49,7 +58,9 @@
 #' dissimilarities). The remaining pairs up to \code{knn + n_random}, are
 #' filled with random pairs among samples with free slots. Because the number of
 #' pairs per sample is fixed, a sample may be paired with a sample that is not
-#' among its own \code{knn} nearest neighbours.
+#' among its own \code{knn} nearest neighbours. Pairs with a dissimilarity of
+#' exactly 0 (identical samples) are only added in the nearest-neighbour step,
+#' never in the random step.
 #'
 #' One sample has one pair fewer if both the number of samples and
 #' \code{knn + n_random} are odd. A warning is given if some samples fall short
@@ -58,25 +69,12 @@
 #' @seealso \code{\link{plot.sparse_diss}}, \code{\link{print.sparse_diss}},
 #'   \code{\link{make_Y_diss}}
 #'
-#' @examples
-#' \dontrun{
-#' com <- gllvm::microbialdata$Y
-#'
-#' sp <- sparse_diss(com, knn = 10, n_random = 3, k_pcoa = 3, seed = 1)
-#' sp
-#' plot(sp)
-#' plot(sp, k = c(1, 3))
-#'
-#' # Fit the model using the selected pairs only
-#' m1 <- rrGDM(Y = com, X = env, k = 2, sparse = sp, family = 'binomial')
-#' }
-#'
 #' @importFrom stats cmdscale as.dist runif
 #' @export
 sparse_diss <- function(Y,
                         knn = 10,
                         n_random = 3,
-                        max_zeros = 1,
+                        max_zeros = Inf,
                         dist_method = 'bray',
                         trans = function(x) x,
                         binary = FALSE,
@@ -92,7 +90,7 @@ sparse_diss <- function(Y,
 
   if (!(inherits(Y, 'dist') || is.matrix(Y) || is.data.frame(Y))) {
     cli::cli_abort(c("{.arg Y} must be a sample x species matrix, data frame or {.cls dist} object.",
-                     "x" = "You have supplied a {.cls {class(Y)}}"))
+                     "x" = "You have supplied a {.cls {class(Y)}}."))
   }
 
   if (!is_count(knn)) {
@@ -105,7 +103,7 @@ sparse_diss <- function(Y,
     cli::cli_abort("{.arg max_zeros} must be a single non-negative integer (or {.val Inf}).")
   }
   if (!is.null(k_pcoa) && (!is_count(k_pcoa) || k_pcoa < 2)) {
-    cli::cli_abort("{.arg k_pcoa} must be {.val NULL} or a single integer of at least 2.")
+    cli::cli_abort("{.arg k_pcoa} must be {.code NULL} or a single integer of at least 2.")
   }
   n_per_sample <- as.integer(knn + n_random)
   if (n_per_sample < 1) {
@@ -458,16 +456,6 @@ print.sparse_diss <- function(x, digits = 3, ...) {
 #' The PCoA is computed on the full dissimilarity matrix, on the link scale (see
 #' \code{k_pcoa} and \code{link} in \code{\link{sparse_diss}}).
 #'
-#' @examples
-#' \dontrun{
-#' sp <- sparse_diss(gllvm::microbialdata$Y, knn = 5, seed = 1)
-#' plot(sp)
-#' plot(sp, edge_col_by = 'diss', edge_alpha = 0.2)
-#'
-#' sp3 <- sparse_diss(gllvm::microbialdata$Y, k_pcoa = 3, seed = 1)
-#' plot(sp3, k = c(2, 3))
-#' }
-#'
 #' @method plot sparse_diss
 #' @export
 plot.sparse_diss <- function(x,
@@ -513,7 +501,7 @@ plot.sparse_diss <- function(x,
   all_types <- c('random', 'zero', 'knn')  # drawing order (last on top)
   if (!is.null(edge_types)) {
     if (!is.character(edge_types) || !all(edge_types %in% all_types)) {
-      cli::cli_abort("{.arg edge_types} must be {.val NULL} or a subset of {.val {all_types}}.")
+      cli::cli_abort("{.arg edge_types} must be {.code NULL} or a subset of {.val {all_types}}.")
     }
   } else {
     edge_types <- all_types
@@ -528,7 +516,6 @@ plot.sparse_diss <- function(x,
 
   var_exp <- x$pcoa$var_exp
 
-  # Plotted axes (in order) as PCoA.1 and PCoA.2, next to the stored coordinates
   coords <- x$pcoa$coords
   coords$PCoA.1 <- coords[[paste0('PCoA', k[1])]]
   coords$PCoA.2 <- coords[[paste0('PCoA', k[2])]]
