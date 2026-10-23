@@ -1,7 +1,4 @@
 #' Prepare design matrices and data (Internal)
-#' @importFrom stats model.frame model.matrix terms update
-#' @importFrom reformulas nobars findbars
-#' @importFrom Matrix sparseMatrix sparse.model.matrix
 #' @noRd
 prepare_data <- function(formula = NULL,
                          formula_sd = NULL,

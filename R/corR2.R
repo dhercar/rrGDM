@@ -21,10 +21,25 @@
 #'   the corR2 be printed? Default is \code{TRUE}.
 #'
 #' @return A single numeric value: the conditional corR2, between 0 and 1.
+#' @examples
+#' set.seed(2)
+#' # simulate data
+#' n <- 25 # sites
+#' p <- 25 # species
 #'
-#' @importFrom stats cor dist sd
+#' env <- data.frame(temp = rnorm(n), moist = rnorm(n))
+#' eta <- as.matrix(env) %*% matrix(rnorm(2 * p), 2, p)
+#' Y <- matrix(rpois(n * p, exp(1 + 0.8 * eta)), n, p,
+#'             dimnames = list(paste0("site", 1:n), paste0("sp", 1:p)))
+#'
+#' # fit model
+#' fit <- rrGDM(Y, env, k = 2,
+#'              formula = ~ temp + moist,
+#'              family = "binomial")
+#'
+#' cor_r2(fit)
 #' @export
-cor_r2 <- function(object, message = TRUE) {
+cor_r2 <- function(object, message = FALSE) {
 
   if (!inherits(object, "rrGDM")) {
     cli::cli_abort("{.arg object} must be a fitted {.cls rrGDM} model.")

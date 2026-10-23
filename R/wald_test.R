@@ -67,8 +67,24 @@
 #' @seealso \code{\link{anova.rrGDM}} for tests by variable,
 #'   \code{\link{summary.rrGDM}}
 #'
+#' @examples
+#' set.seed(2)
+#' # simulate data
+#' n <- 25 # sites
+#' p <- 25 # species
+#'
+#' env <- data.frame(temp = rnorm(n), moist = rnorm(n))
+#' eta <- as.matrix(env) %*% matrix(rnorm(2 * p), 2, p)
+#' Y <- matrix(rpois(n * p, exp(1 + 0.8 * eta)), n, p,
+#'             dimnames = list(paste0("site", 1:n), paste0("sp", 1:p)))
+#'
+#' # fit model
+#' fit <- rrGDM(Y, env, k = 2,
+#'              formula = ~ temp + moist,
+#'              family = "binomial")
+#'
+#' wald_test(fit)
 #' @export
-#' @importFrom stats pchisq pnorm
 wald_test <- function(object, include_intercept = FALSE) {
 
   if (!inherits(object, "rrGDM")) {
@@ -386,23 +402,26 @@ print.wald_rrGDM <- function(x, digits = 4, ...) {
 #'
 #' @seealso \code{\link{wald_test}} for per-term tests, effect sizes and
 #'   dispersion estimates.
-#'
 #' @examples
-#' \dontrun{
-#' m <- rrGDM(Y = com,
-#'            X = env,
-#'            k = 2,
-#'            formula = ~ pH + I(pH^2) + Region,
-#'            formula_sd = ~ Region,
-#'            family = 'binomial')
+#' set.seed(2)
+#' # simulate data
+#' n <- 25 # sites
+#' p <- 25 # species
 #'
-#' # One row per variable; Region tested on location and dispersion jointly
-#' anova(m)
-#' }
+#' env <- data.frame(temp = rnorm(n), moist = rnorm(n))
+#' eta <- as.matrix(env) %*% matrix(rnorm(2 * p), 2, p)
+#' Y <- matrix(rpois(n * p, exp(1 + 0.8 * eta)), n, p,
+#'             dimnames = list(paste0("site", 1:n), paste0("sp", 1:p)))
 #'
+#' fit <- rrGDM(Y, env, k = 2,
+#'              formula = ~ temp + moist,
+#'              family = "binomial")
+#'
+#' anova(fit)
+#' anova(fit, separate = TRUE)
 #' @export
 #' @method anova rrGDM
-#' @importFrom stats anova pchisq
+#' @importFrom stats anova
 anova.rrGDM <- function(object,
                         ...,
                         interactions = TRUE,

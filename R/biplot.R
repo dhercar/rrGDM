@@ -90,8 +90,7 @@
 #' biplot(m1, species_cor = TRUE, species_cor_n = 20)
 #' }
 #'
-#' @importFrom grid arrow unit
-#' @importFrom stats cor varimax biplot
+#' @importFrom stats biplot
 #' @method biplot rrGDM
 #' @export
 biplot.rrGDM <- function(x,

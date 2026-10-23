@@ -42,10 +42,52 @@
 #' (\code{dist}, if \code{boot = FALSE}) or one column per value of \code{probs}
 #' (named \code{"2.5\%"}, \code{"50\%"}, ..., if \code{boot = TRUE}).
 #'
+#' @examples
+#' set.seed(2)
+#' # simulate data
+#' n <- 25 # sites
+#' p <- 25 # species
+#'
+#' env <- data.frame(temp = rnorm(n), moist = rnorm(n))
+#' eta <- as.matrix(env) %*% matrix(rnorm(2 * p), 2, p)
+#' Y <- matrix(rpois(n * p, exp(1 + 0.8 * eta)), n, p,
+#'             dimnames = list(paste0("site", 1:n), paste0("sp", 1:p)))
+#'
+#' fit <- rrGDM(Y, env, k = 2,
+#'              formula = ~ temp + moist,
+#'              family = "binomial")
+#' #  predict
+#' pred <- predict(fit, boot = FALSE) # point predictions, all pairs
+#' head(pred)
+#'
+#' # Predict ordination coordinates
+#' pred_ord <- predict(fit,
+#'                     ordination = TRUE, # latent positions
+#'                     conditional = TRUE)
+#'
+#' head(pred_ord)
+#' plot(pred_ord[,c(1,2)])
+#'
+#' # with newdata
+#' new <- data.frame(temp = c(-1, 0, 1), moist = c(0, 0, 0))
+#' pred_new <- predict(fit, newdata = new)
+#' head(pred_new)
+#'
+#' # Predict position in ordination
+#' pred_new_ord <- predict(fit,
+#'                         newdata = new,
+#'                         ordination = TRUE,
+#'                         n_sim = 500)
+#'
+#' # Visualise sample-level variability
+#' plot(pred_new_ord$L.1,
+#'      pred_new_ord$L.2,
+#'      xlab = 'L1',
+#'      ylab = 'L2',
+#'      asp = 1,
+#'      col = c('blue', 'grey', 'red')[as.numeric(as.factor(pred_new_ord$temp))])
+#'
 #' @method predict rrGDM
-#' @importFrom MASS mvrnorm
-#' @importFrom stats delete.response model.frame model.matrix quantile rnorm na.pass dist
-#' @importFrom utils combn
 #' @export
 predict.rrGDM <- function(object,
                           newdata = NULL,
@@ -117,7 +159,7 @@ predict.rrGDM <- function(object,
 
   } else {
     newdata <- as.data.frame(newdata)
-    tt_fix <- delete.response(object$terms_fix)
+    tt_fix <- stats::delete.response(object$terms_fix)
 
     mf_fix <- stats::model.frame(
       tt_fix,
@@ -141,7 +183,7 @@ predict.rrGDM <- function(object,
     }
 
     # --- DISPERSION MODEL ---
-    tt_sd <- delete.response(object$terms_sd)
+    tt_sd <- stats::delete.response(object$terms_sd)
 
     mf_sd <- stats::model.frame(
       tt_sd,
@@ -195,7 +237,7 @@ predict.rrGDM <- function(object,
         tau <- exp(W_design %*% beta)
         L <- X_design %*% lambda
         if (sim_site)  { # Include site level error (dispersion)? otherwise param uncertainty only
-          L <- L + matrix(rnorm(nrow(X_design) * object$k, 0, rep(tau, object$k)), ncol = object$k)
+          L <- L + matrix(stats::rnorm(nrow(X_design) * object$k, 0, rep(tau, object$k)), ncol = object$k)
         }
         data.frame(draw = x, L = L)
       })
@@ -207,7 +249,7 @@ predict.rrGDM <- function(object,
       samples <- lapply(seq_len(n_sim), function(x){
         L <- L_base
         if (sim_site)  {
-          L <- L + matrix(rnorm(nrow(X_design) * object$k, 0, rep(tau, object$k)), ncol = object$k)
+          L <- L + matrix(stats::rnorm(nrow(X_design) * object$k, 0, rep(tau, object$k)), ncol = object$k)
         }
         data.frame(draw = x, L = L)
       })
@@ -226,8 +268,8 @@ predict.rrGDM <- function(object,
 
       # Return dissimilarities (summarised into quantiles)
       samples_dist <- do.call(cbind, samples_dist)
-      samples_data <- t(matrix(apply(samples_dist, 1, quantile, probs = probs), nrow = length(probs)))
-      colnames(samples_data) <- names(quantile(0, probs = probs))
+      samples_data <- t(matrix(apply(samples_dist, 1, stats::quantile, probs = probs), nrow = length(probs)))
+      colnames(samples_data) <- names(stats::quantile(0, probs = probs))
       return(data.frame(comb, samples_data, check.names = FALSE))
     }
 

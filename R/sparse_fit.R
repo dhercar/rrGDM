@@ -68,7 +68,6 @@
 #'
 #' @seealso \code{\link{plot.sparse_diss}}, \code{\link{print.sparse_diss}}
 #'
-#' @importFrom stats cmdscale as.dist runif
 #' @export
 sparse_diss <- function(Y,
                         knn = 10,

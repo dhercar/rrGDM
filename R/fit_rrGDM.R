@@ -107,8 +107,29 @@
 #'   \code{\link{wald_test}}, \code{\link{get_LV}}, \code{\link{predict.rrGDM}},
 #'   \code{\link{biplot.rrGDM}}, \code{\link{stress}}, \code{\link{cor_r2}},
 #'   \code{\link{include_se}}, \code{\link{sparse_diss}}
-#' @importFrom TMB MakeADFun sdreport
-#' @importFrom stats nlminb rnorm median sd
+#'
+#' @examples
+#'   # Toy community with 25 sites, 25 species, 2 environmental gradients
+#'   set.seed(2)
+#'   n <- 25 # sites
+#'   p <- 25 # species
+#'
+#'   env <- data.frame(temp = rnorm(n), moist = rnorm(n))
+#'   eta <- as.matrix(env) %*% matrix(rnorm(2 * p), 2, p)
+#'   Y <- matrix(rpois(n * p, exp(1 + 0.8 * eta)), n, p)
+#'
+#'   fit <- rrGDM(Y, env, k = 2,
+#'                formula = ~ temp + moist,
+#'                family = "binomial")
+#'   summary(fit)
+#'
+#'   # Model the sample-level dispersion too
+#'   fit2 <- rrGDM(Y, env, k = 2,
+#'                 formula = ~ temp + moist,
+#'                 formula_sd = ~ temp,
+#'                 family = "binomial")
+#'   summary(fit2)
+#'
 #' @export
 rrGDM <- function(Y,
                   X = NULL,
@@ -244,11 +265,11 @@ rrGDM <- function(Y,
     n_lv = k)
   # ---------- BASE TMB PARAMS ----------
   parameters <- list(
-    lambda = matrix(rnorm(n_env * k, 0, 1e-5), n_env, k),
-    u_sample = matrix(rnorm(n_samples*k,0,  1e-5), n_samples, k),
+    lambda = matrix(stats::rnorm(n_env * k, 0, 1e-5), n_env, k),
+    u_sample = matrix(stats::rnorm(n_samples*k,0,  1e-5), n_samples, k),
     log_scale = switch(family,
                        "beta" = 2,
-                       "beta.binomial" = log(median(Y_den)),
+                       "beta.binomial" = log(stats::median(Y_den)),
                        -1),
     beta = rep(0, ncol(data_design$W_design)),
     u = matrix(0, nrow = ncol(data_design$Z_design), ncol = k),
@@ -298,7 +319,7 @@ rrGDM <- function(Y,
 
     if (sample_error) {
       parameters$u_sample <- parameters$u_sample + as.matrix(loadings$u_sample)
-      parameters$beta[1]  <- log(sd(loadings$u_sample))
+      parameters$beta[1]  <- log(stats::sd(loadings$u_sample))
     }
 
     if (!is.null(loadings$lambda_init)) {
@@ -400,13 +421,13 @@ rrGDM <- function(Y,
     centre_re <- if (previous_best) base_re else init_re
 
     if (length(re_idx) > 0) {
-      re_start <- if (i == 1) centre_re else centre_re + rnorm(length(re_idx), 0, init_jitter)
+      re_start <- if (i == 1) centre_re else centre_re + stats::rnorm(length(re_idx), 0, init_jitter)
       obj$env$last.par.best[re_idx] <- re_start
       obj$env$last.par[re_idx] <- re_start
     }
 
     obj$env$value.best <- Inf
-    start <- if (i == 1) centre_fixed else centre_fixed + rnorm(length(centre_fixed), 0, init_jitter)
+    start <- if (i == 1) centre_fixed else centre_fixed + stats::rnorm(length(centre_fixed), 0, init_jitter)
     fit <- tryCatch(
       stats::nlminb(start = start,
                     objective = obj$fn,
@@ -536,8 +557,26 @@ rrGDM <- function(Y,
 #' @param ... Further arguments passed to \code{\link[TMB]{sdreport}}.
 #'
 #' @return A model object, including the sd report
+#'
+#' @examples
+#' set.seed(2)
+#' # simulate data
+#' n <- 25 # sites
+#' p <- 25 # species
+#' env <- data.frame(temp = rnorm(n), moist = rnorm(n))
+#' eta <- as.matrix(env) %*% matrix(rnorm(2 * p), 2, p)
+#' Y <- matrix(rpois(n * p, exp(1 + 0.8 * eta)), n, p,
+#'             dimnames = list(paste0("site", 1:n), paste0("sp", 1:p)))
+#'
+#' # fit model
+#' fit <- rrGDM(Y, env, k = 2,
+#'              formula = ~ temp + moist,
+#'              family = "binomial")
+#'
+#' fit0 <- rrGDM(Y, env, k = 2, formula = ~ temp + moist, family = "binomial", se = FALSE)
+#' fit0 <- include_se(fit0)
+#' wald_test(fit0)
 #' @export
-#' @importFrom TMB sdreport
 #'
 include_se <- function(object, ...) {
   if (!inherits(object, "rrGDM")) cli::cli_abort("{.arg object} must be a fitted {.cls rrGDM} model.")
@@ -569,7 +608,6 @@ include_se <- function(object, ...) {
 #' parameters. Loadings are printed as estimated (i.e., unrotated). Use
 #' \code{\link{get_LV}} to extract the full matrices.
 #'
-#' @importFrom stats formula
 #' @method print rrGDM
 #' @export
 print.rrGDM <- function(x, digits = 3, n_u = 5, ...) {
