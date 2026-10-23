@@ -1,3 +1,4 @@
+#define TMB_LIB_INIT R_init_rrGDM
 #include <TMB.hpp>
 template<class Type>
 Type objective_function<Type>::operator() ()
@@ -92,7 +93,8 @@ Type objective_function<Type>::operator() ()
       dist_2 += diff * diff;
     }
 
-    Type dist = sqrt(dist_2 + 1e-10);
+    dist_2 += Type(1e-10);   // avoid exact 0
+    Type dist = sqrt(dist_2);
 
     // Inverse link
     Type mu;
@@ -108,11 +110,7 @@ Type objective_function<Type>::operator() ()
     break;
     }
 
-    // for stability
-    //if (family == 1 || family == 2 || family == 3) {
-    //  if (mu < Type(1e-8)) mu = Type(1e-8);
-    //  if (mu > Type(1.0 - 1e-8)) mu = Type(1.0 - 1e-8);
-    //}
+    if (family != 0) mu = Type(1e-9) + (Type(1) - Type(2e-9)) * mu;
     mu_vec(i) = mu;
   }
 
@@ -136,7 +134,8 @@ Type objective_function<Type>::operator() ()
       for(int i = 0; i < n_pairs; i++) {
       Type a = mu_vec(i) * phi;
       Type b = (Type(1.0) - mu_vec(i)) * phi;
-      nll -= lgamma(Y(i) + a) + lgamma(Y_den(i) - Y(i) + b) - lgamma(Y_den(i) + a + b)
+      nll -= lgamma(Y_den(i) + Type(1)) - lgamma(Y(i) + Type(1)) - lgamma(Y_den(i) - Y(i) + Type(1))
+        + lgamma(Y(i) + a) + lgamma(Y_den(i) - Y(i) + b) - lgamma(Y_den(i) + a + b)
         - lgamma(a) - lgamma(b) + lgamma(a + b);
     }
       break;
