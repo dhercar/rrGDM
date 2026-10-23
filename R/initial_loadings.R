@@ -70,7 +70,7 @@ initial_loadings <- function(Y,
     dist_method <- "bray"
   }
 
-  # Compute fill diss. matrix, ignoring num_den specifications (e.g., for binomial family)
+  # Compute full diss. matrix, ignoring num_den specifications (e.g., for binomial family)
   D <- as.matrix(vegan::vegdist(Y, method = dist_method, binary = binary))
 
   if (link %in% c("negexp", "neggaus")) {
@@ -86,12 +86,12 @@ initial_loadings <- function(Y,
 
   # ------------------------------------ PCOA ------------------
   n <- nrow(D_linear)
-  J <- diag(n) - matrix(1 / n, n, n)
-  B <- -0.5 * (J %*% (D_linear^2) %*% J)
+  D2 <- D_linear^2
+  B <- -0.5 * (D2 - outer(rowMeans(D2), colMeans(D2), "+") + mean(D2))   # double centring: J %*% D2 %*% J
   e <- eigen(B, symmetric = TRUE)
 
-  # Retain only positive VAP
-  pos_idx <- which(e$values > 0)
+  # Retain only positive eigenvalues (not numerically zero ones: B always has at least one)
+  pos_idx <- which(e$values > 1e-10 * max(e$values))
   n_pos   <- length(pos_idx)
 
   if (n_pos < k) {
@@ -100,14 +100,14 @@ initial_loadings <- function(Y,
       "i" = "{n_pos} positive eigenvalue{?s} {?was/were} found, but {k} {?is/are} required.",
       ">" = "Possible causes:",
       " " = "- {.var k} is large relative to the number of sites.",
-      " " = "- The dissimilarity matrix is very sparse (e.g., with many 0s or 1s)).",
+      " " = "- The dissimilarity matrix is very sparse (e.g., with many 0s or 1s).",
       "!" = "Try reducing {.var k}, using more sites if available, or a different {.var dist_method}."
     ))
   }
 
   eig_pos  <- e$values[pos_idx]
   evec_pos <- e$vectors[, pos_idx, drop = FALSE]
-  scale_correction = sqrt(sum(eig_pos) / sum(eig_pos[1:k])) # correction for reduced var. when using k dims.
+  scale_correction <- sqrt(sum(eig_pos) / sum(eig_pos[seq_len(k)])) # correction for reduced var. when using k dims.
 
   # PCOA scores
   U_pcoa <- evec_pos %*% diag(sqrt(eig_pos), nrow = n_pos) # site-level scores
@@ -132,32 +132,42 @@ initial_loadings <- function(Y,
 
     # Eigendecomposition of the fitted scores
     rda <- eigen(crossprod(U_fitted), symmetric = TRUE)
-    V_k <- rda$vectors[, 1:k, drop = FALSE] # take top k axes
+    V_k <- rda$vectors[, seq_len(k), drop = FALSE]
 
     u_env_k   <- U_fitted %*% V_k   # environmentally-explained site scores
     u_raw <- U_resid  %*% V_k   # residual
 
     lambda_raw <- qr.coef(qx, u_env_k)
+    if (anyNA(lambda_raw)) {
+      bad <- which(rowSums(is.na(lambda_raw)) > 0)
+      bad_nm <- if (is.null(rownames(lambda_raw))) bad else rownames(lambda_raw)[bad]
+      cli::cli_warn(c(
+        "!" = "The predictors are collinear (rank-deficient design matrix).",
+        "i" = "Initial loadings of {.val {bad_nm}} were set to 0."
+      ))
+    }
     lambda_raw[is.na(lambda_raw)] <- 0
 
   } else {
     # No predictors, use top k PCoA axes
-    u_raw      <- U_pcoa[, 1:k, drop = FALSE]
+    u_raw      <- U_pcoa[, seq_len(k), drop = FALSE]
     lambda_raw <- NULL
   }
 
-  # -------------ROTATE TO MEET CONTRAINTS 1 OR 2 ------------------
+  # ------------- ROTATE TO MEET CONSTRAINTS 1 OR 2 ------------------
   if (QR && k > 1) {
     if (constraint == 1) {
       # Rotate lambda to lower tri, and apply rot. to u_sample
       p_lambda <- nrow(lambda_raw)
       rank_r <- min(k, p_lambda) # deals with the case of p < k
 
-      qr_decomp <- qr(t(lambda_raw))
+      # tol = 0: no pivoting, so that the rows of lambda keep the order of the predictors
+      # (the default would move columns of zeros, e.g. a constant predictor, to the end)
+      qr_decomp <- qr(t(lambda_raw), tol = 0)
       Q_full <- qr.Q(qr_decomp, complete = TRUE)
       R_econ <- qr.R(qr_decomp)
 
-      # If p < lambda, pad R with 0s
+      # If p < k, pad R with 0s
       if (k > p_lambda) {
         R_full <- rbind(R_econ, matrix(0, k - p_lambda, p_lambda))
       } else {
@@ -172,8 +182,8 @@ initial_loadings <- function(Y,
 
     } else if (constraint == 2) {
       # Rotate u_sample to lower tri, apply rot. to lambda
-      # This part does not check dims, assumes n sample > k
-      qr_decomp <- qr(t(u_raw))
+      # n > k is guaranteed by the eigenvalue check above. tol = 0: no pivoting
+      qr_decomp <- qr(t(u_raw), tol = 0)
       R_mat <- qr.R(qr_decomp)
       sign_vec <- sign2(diag(R_mat))
 
@@ -204,7 +214,7 @@ initial_loadings <- function(Y,
     lambda_final <- lambda_raw
   }
 
-  colnames(u_final) <- paste0("LV", 1:k)
+  colnames(u_final) <- paste0("LV", seq_len(k))
   if (!is.null(lambda_final)) lambda_final <- lambda_final * scale_correction
 
   list( u_sample = u_final * scale_correction,
