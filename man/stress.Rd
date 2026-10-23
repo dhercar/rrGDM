@@ -51,3 +51,22 @@ directly comparable to the stress reported by NMDS software.
 Stress is returned as a proportion between 0 (best) and 1 (worst) for
 bounded dissimilarities.
 }
+\examples{
+set.seed(2)
+# simulate data
+n <- 25 # sites
+p <- 25 # species
+
+env <- data.frame(temp = rnorm(n), moist = rnorm(n))
+eta <- as.matrix(env) \%*\% matrix(rnorm(2 * p), 2, p)
+Y <- matrix(rpois(n * p, exp(1 + 0.8 * eta)), n, p,
+            dimnames = list(paste0("site", 1:n), paste0("sp", 1:p)))
+
+fit <- rrGDM(Y, env, k = 2,
+             formula = ~ temp + moist,
+             family = "binomial")
+
+stress(fit)
+stress(fit, type = "metric", scale = "response")
+
+}

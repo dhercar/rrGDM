@@ -41,11 +41,24 @@ with the same rotation matrix preserves these relationships and all
 pairwise distances between samples.
 }
 \examples{
-\dontrun{
-m1 <- rrGDM(Y = com, X = env, k = 2, formula = ~ pH_s, family = 'binomial')
-lv <- get_LV(m1)
-plot(lv$L, asp = 1) # conditional ordination
-arrows(0, 0, lv$lambda[, 1], lv$lambda[, 2]) # environmental loadings
-}
+set.seed(1)
+# Simulate data
+n <- 50 # sites
+p <- 25 # species
+env <- data.frame(temp = rnorm(n), moist = rnorm(n))
+eta <- as.matrix(env) \%*\% matrix(rnorm(2 * p), 2, p)
+Y <- matrix(rpois(n * p, exp(1 + 0.8 * eta)), n, p,
+            dimnames = list(paste0("site", 1:n), paste0("sp", 1:p)))
 
+fit <- rrGDM(Y, env, k = 2, formula = ~ temp + moist,
+             family = "binomial")
+
+if (requireNamespace("ggplot2", quietly = TRUE)) {
+  # basic biplot
+  biplot(fit)
+  # add species correlations with latent variables
+  biplot(fit, type = "marginal", species_cor = TRUE)
+  # colour by predictor
+  biplot(fit, col_by = "moist") + ggplot2::scale_colour_viridis_c()
+}
 }

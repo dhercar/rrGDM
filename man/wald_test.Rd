@@ -72,3 +72,25 @@ The degrees of freedom of the \code{lambda} test depend on
     should be interpreted with caution.
 }
 }
+\examples{
+set.seed(2)
+# simulate data
+n <- 25 # sites
+p <- 25 # species
+
+env <- data.frame(temp = rnorm(n), moist = rnorm(n))
+eta <- as.matrix(env) \%*\% matrix(rnorm(2 * p), 2, p)
+Y <- matrix(rpois(n * p, exp(1 + 0.8 * eta)), n, p,
+            dimnames = list(paste0("site", 1:n), paste0("sp", 1:p)))
+
+# fit model
+fit <- rrGDM(Y, env, k = 2,
+             formula = ~ temp + moist,
+             family = "binomial")
+
+wald_test(fit)
+}
+\seealso{
+\code{\link{anova.rrGDM}} for tests by variable,
+  \code{\link{summary.rrGDM}}
+}

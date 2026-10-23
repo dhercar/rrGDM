@@ -11,9 +11,12 @@
 \code{\link{wald_test}}.}
 
 \item{digits}{Number of significant digits for test statistics and
-effect sizes. Default is 3.}
+effect sizes. Default is 4.}
 
 \item{...}{Currently unused.}
+}
+\value{
+Invisibly returns \code{x}.
 }
 \description{
 Print method for wald_rrGDM objects

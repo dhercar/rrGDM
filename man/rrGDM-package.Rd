@@ -5,7 +5,10 @@
 \alias{rrGDM-package}
 \title{rrGDM: Reduced Rank Generalised Dissimilarity Models}
 \description{
-Fits Reduced Rank Generalised Dissimilarity Models (RRGDM), which extend classic Generalised Dissimilarity Models by embedding sites in a low-dimensional latent space via 'TMB' (Template Model Builder). Environmental predictors, random effects, and effects on dispersion can all be specified directly on the latent positions rather than on pairwise distances, unifying community ordination and dissimilarity regression within a single likelihood-based framework. Includes tools for model fitting, prediction, inference on environmental loadings and dispersion effects, goodness-of-fit assessment, and visualisation of model-based ordination.
+Fits generalised dissimilarity models in which the dissimilarities between
+sites are modelled as distances in a low-dimensional latent space, using
+Template Model Builder (TMB) for estimation. See \code{\link{rrGDM}} to fit
+a model.
 }
 \seealso{
 Useful links:
@@ -16,7 +19,7 @@ Useful links:
 
 }
 \author{
-\strong{Maintainer}: Daniel Hernandez Carrasco \email{dani.hc97@gmail.com}
+\strong{Maintainer}: Daniel Hernandez Carrasco \email{dani.hc97@gmail.com} (\href{https://orcid.org/0000-0002-1639-7511}{ORCID}) [copyright holder]
 
 }
 \keyword{internal}

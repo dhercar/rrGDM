@@ -4,7 +4,7 @@
 \alias{cor_r2}
 \title{Conditional correlation-based R2 (corR2) for a fitted rrGDM model}
 \usage{
-cor_r2(object, message = TRUE)
+cor_r2(object, message = FALSE)
 }
 \arguments{
 \item{object}{A fitted object of class \code{rrGDM}.}
@@ -30,4 +30,22 @@ predictors. Because the conditional coordinates include the sample-level
 errors, the corR2 can be high even if the predictors explain little. Like
 \code{\link{stress}}, it increases as \code{k} increases, so it is
 best used descriptively.
+}
+\examples{
+set.seed(2)
+# simulate data
+n <- 25 # sites
+p <- 25 # species
+
+env <- data.frame(temp = rnorm(n), moist = rnorm(n))
+eta <- as.matrix(env) \%*\% matrix(rnorm(2 * p), 2, p)
+Y <- matrix(rpois(n * p, exp(1 + 0.8 * eta)), n, p,
+            dimnames = list(paste0("site", 1:n), paste0("sp", 1:p)))
+
+# fit model
+fit <- rrGDM(Y, env, k = 2,
+             formula = ~ temp + moist,
+             family = "binomial")
+
+cor_r2(fit)
 }

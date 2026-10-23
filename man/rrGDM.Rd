@@ -2,7 +2,7 @@
 % Please edit documentation in R/fit_rrGDM.R
 \name{rrGDM}
 \alias{rrGDM}
-\title{rrGDM' function}
+\title{Fit a reduced-rank generalised dissimilarity model}
 \usage{
 rrGDM(
   Y,
@@ -45,38 +45,148 @@ rrGDM(
 
 \item{dist_method}{A character string specifying the distance method to be used (e.g., "euclidean", "bray"). Default is "bray".}
 
-\item{scale_diss}{A numeric vector of length two indicating a new scale for dissimilarities. Useful for distributions bounded between 0 and 1 (e.g., beta family)}
+\item{scale_diss}{A numeric vector of length two indicating a new scale for dissimilarities. Useful for distributions bounded between 0 and 1 (e.g., beta family). Ignored, with a warning, for the \code{"binomial"} and \code{"beta.binomial"} families.}
 
-\item{family}{A character string specifying the family of the response variable (e.g., "beta", "binomial"). Default is "gaussian".}
+\item{family}{A character string specifying the family of the response variable: \code{"gaussian"}, \code{"binomial"}, \code{"beta"} or \code{"beta.binomial"}. Default is \code{"gaussian"}.}
 
-\item{link}{Character string specifying the link function to be used (e.g., "negexp"). Default is 'identity' for Gaussian distribution, and 'negexp' for beta and binomial distributions.}
+\item{link}{Character string specifying the link function to be used: \code{"identity"}, \code{"negexp"} or \code{"neggaus"}. Default is 'identity' for Gaussian distribution, and 'negexp' for beta and binomial distributions.}
 
 \item{se}{Logical indicating whether to calculate standard errors (TRUE) or not (FALSE). Default is TRUE.}
 
-\item{sample_error}{Logical. If TRUE, includes site-level random effects to account for variation not explained by predictors.}
+\item{sample_error}{Logical. If TRUE, includes site-level random effects to account for variation not explained by predictors. Default is TRUE.}
 
-\item{constraint}{Integer. Specifies identifiability constraints. 1: Constraint applied to environmental loadings matrix (\eqn{\Lambda}); 2: Constraint applied to site random effects matrix (U). Default is 1.}
+\item{constraint}{Integer. Specifies identifiability constraints. 0: no constraint; 1: Constraint applied to environmental loadings matrix (\eqn{\Lambda}); 2: Constraint applied to site random effects matrix (U). Default is 1.}
 
 \item{trans}{Function used to transform the response matrix before computing dissimilarities (e.g., log, sqrt). Default is no transformation.}
 
 \item{sparse}{Optional object of class \code{sparse_diss} (see \code{\link{sparse_diss}}). If supplied, the model is fitted using only the pairs of samples listed in \code{sparse$edges}, instead of all pairs. It must be created from the same samples as \code{Y}. Default is NULL (all pairs).}
 
-\item{seed}{An integer specifying the seed for random number generation. Default is NULL.}
+\item{seed}{An integer passed to \code{set.seed()} at the start of the fit, so it changes the state of R's random number generator. Default is NULL (no seed is set).}
 
-\item{init_jitter}{Numeric. A small standard deviation used to jitter initial parameter values.}
+\item{init_jitter}{Numeric. Standard deviation of the Gaussian noise added to the starting values of every start after the first. Only used when \code{n_starts > 1}. Default is 0.1.}
 
-\item{previous_best}{Logical. Controls where the jitter for multiple starts after the first is applied
+\item{n_starts}{Integer. Number of optimisation starts. The first start uses the values from \code{init_method} (or \code{start_fit}); each further start adds Gaussian noise (SD \code{init_jitter}) to the best solution so far (\code{previous_best = TRUE}) or to the initial values (\code{FALSE}). With more than one start, only fits that converged and have a positive-definite Hessian are eligible as the final fit. Default is 1.}
+
+\item{previous_best}{Logical. Controls where the jitter for multiple starts after the first is applied.
 If \code{TRUE} (default), each start jitters around the best solution found so far (perturb-and-reoptimise). If \code{FALSE}, every start jitters around the initial values (from \code{init_method}), so starts do not depend on earlier fits. Only relevant when \code{n_starts > 1}.}
 
-\item{init_method}{A character string specifying a method used to obtain initial values for optimisation. Currently, only \code{'PCOA'} and \code{'dbRDA'} available. Ignored if \code{start_fit} is supplied.}
+\item{init_method}{A character string specifying a method used to obtain initial values for optimisation. Currently, only \code{'PCOA'} and \code{'dbRDA'} are available; \code{NULL} starts from small random values. Default is \code{'dbRDA'}. Ignored if \code{start_fit} is supplied.}
 
 \item{start_fit}{Optional fitted \code{rrGDM} model used to initialise the optimisation (e.g., a fast sparse fit before refitting with more pairs). It must have the same samples, \code{k}, \code{family}, \code{link}, \code{constraint}, predictors and random-effect structure as the new model; the set of pairs (\code{sparse}) may differ. If supplied, \code{init_method} is ignored. Default is NULL.}
 
-\item{control}{A list of control parameters passed to stats::nlminb}
+\item{trace}{Logical. If \code{TRUE}, TMB prints the optimisation progress and the objective of each start is reported. Default is \code{FALSE}.}
+
+\item{control}{A list of control parameters passed to \code{\link[stats]{nlminb}}. \code{iter.max} defaults to 1000.}
 }
 \value{
-An object of class 'rrGDM' containing the fitted model object, the optimized parameters, and other relevant information.
+An object of class \code{"rrGDM"}: a list with the components below.
+
+\strong{Estimation}
+\describe{
+  \item{\code{opt}}{Result of \code{\link[stats]{nlminb}} for the fixed-effect
+    parameters}
+  \item{\code{obj}}{The \pkg{TMB} object created by \code{\link[TMB]{MakeADFun}}}
+  \item{\code{best_par}}{Numeric vector with estimated parameters at the
+    optimum, including the modes of random effects}
+  \item{\code{sd_rep}}{An \code{\link[TMB]{sdreport}} object with standard
+    errors and the covariance matrix of the estimates, or \code{NULL} if
+    \code{se = FALSE} or the standard errors could not be computed. See
+    \code{\link{include_se}}}
+  \item{\code{pd_hess}}{\code{TRUE} if the Hessian at the optimum is positive
+    definite and not nearly singular, \code{FALSE} if not, and \code{NA} if
+    there is no \code{sd_rep}}
+}
+
+\strong{Data}
+\describe{
+  \item{\code{Y}, \code{X}}{The community matrix and the predictor data as
+    supplied}
+  \item{\code{Y_diss}, \code{Y_den}}{Observed values for the fitted pairs.
+    For the \code{"gaussian"} and \code{"beta"} families, \code{Y_diss} is
+    the dissimilarity (rescaled to \code{scale_diss} if given) and
+    \code{Y_den} is 1. For \code{"binomial"} and \code{"beta.binomial"},
+    \code{Y_diss} is the numerator of the dissimilarity and
+    \code{Y_den} the denominator, so that
+    \code{Y_diss / Y_den} is the dissimilarity.}
+  \item{\code{pairs}}{Two-column matrix with the row numbers of \code{Y} of the
+    two samples in each fitted pair, in the same order as \code{Y_diss}.}
+  \item{\code{sparse}}{The \code{\link{sparse_diss}} object supplied in
+    \code{sparse}, or \code{NULL} if all pairs were used.}
+  \item{\code{obs_full}}{Only for fits with \code{sparse}: observed
+    dissimilarities of \emph{all} pairs of samples, in the order of
+    \code{\link[stats]{dist}}}
+}
+
+\strong{Design matrices}
+\describe{
+  \item{\code{X_design}}{Design matrix of the predictors in \code{formula}
+    (samples x predictors, without intercept; zero columns if there are no
+    predictors).}
+  \item{\code{W_design}}{Design matrix of \code{formula_sd} (samples x terms,
+    with intercept)}
+  \item{\code{Z_design}}{Sparse indicator matrix for the random intercepts
+  in \code{formula} (samples x total number of groups).}
+  \item{\code{map_re}}{Integer vector giving, for each column of
+    \code{Z_design}, the random-effect term it belongs to (index into
+    \code{re_vars}). \code{integer(0)} if there are no random effects.}
+  \item{\code{re_vars}}{Names of the grouping variables with random
+    intercepts. \code{character(0)} if there are none.}
+}
+
+\strong{Model specification}
+\describe{
+  \item{\code{k}, \code{family}, \code{link}}{Number of latent dimensions,
+    family and link used}
+  \item{\code{inv_link}}{Function that maps distances in the latent space to
+    expected dissimilarities (identity, \eqn{1 - e^{-d}} or
+    \eqn{1 - e^{-d^2}}).}
+  \item{\code{constraint}}{Identifiability constraint used}
+  \item{\code{formula}, \code{formula_sd}}{The formulas supplied.}
+  \item{\code{formula_fix}}{\code{formula} without the random-effect terms
+    (\code{~0} if there are no predictors).}
+  \item{\code{terms_fix}, \code{terms_sd}}{\code{\link[stats]{terms}} objects
+    of the fixed-effect and \code{formula_sd} models.}
+  \item{\code{xlevels_fix}, \code{xlevels_sd}, \code{contrasts_fix},
+    \code{contrasts_sd}}{Factor levels and contrasts used to build the design
+    matrices. Used to build the design matrices for new data.}
+  \item{\code{call}}{The matched call.}
+}
 }
 \description{
 Fit a reduced-rank Generalised Dissimilarity Model using TMB
+}
+\details{
+With \code{constraint = 1} (or \code{2}) the upper triangle of the loadings
+\eqn{\Lambda} (or of the sample-level errors \eqn{U}) is fixed at 0 so that
+the model is identifiable. A positive diagonal is currently not imposed, so the sign of
+a latent axis is arbitrary.
+}
+\examples{
+  # Toy community with 25 sites, 25 species, 2 environmental gradients
+  set.seed(2)
+  n <- 25 # sites
+  p <- 25 # species
+
+  env <- data.frame(temp = rnorm(n), moist = rnorm(n))
+  eta <- as.matrix(env) \%*\% matrix(rnorm(2 * p), 2, p)
+  Y <- matrix(rpois(n * p, exp(1 + 0.8 * eta)), n, p)
+
+  fit <- rrGDM(Y, env, k = 2,
+               formula = ~ temp + moist,
+               family = "binomial")
+  summary(fit)
+
+  # Model the sample-level dispersion too
+  fit2 <- rrGDM(Y, env, k = 2,
+                formula = ~ temp + moist,
+                formula_sd = ~ temp,
+                family = "binomial")
+  summary(fit2)
+
+}
+\seealso{
+\code{\link{summary.rrGDM}}, \code{\link{anova.rrGDM}},
+  \code{\link{wald_test}}, \code{\link{get_LV}}, \code{\link{predict.rrGDM}},
+  \code{\link{biplot.rrGDM}}, \code{\link{stress}}, \code{\link{cor_r2}},
+  \code{\link{include_se}}, \code{\link{sparse_diss}}
 }

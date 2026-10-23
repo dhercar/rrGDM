@@ -81,18 +81,22 @@ As with \code{\link{wald_test}}, tests on location effects can be
 anti-conservative with few samples.
 }
 \examples{
-\dontrun{
-m <- rrGDM(Y = com,
-           X = env,
-           k = 2,
-           formula = ~ pH + I(pH^2) + Region,
-           formula_sd = ~ Region,
-           family = 'binomial')
+set.seed(2)
+# simulate data
+n <- 25 # sites
+p <- 25 # species
 
-# One row per variable; Region tested on location and dispersion jointly
-anova(m)
-}
+env <- data.frame(temp = rnorm(n), moist = rnorm(n))
+eta <- as.matrix(env) \%*\% matrix(rnorm(2 * p), 2, p)
+Y <- matrix(rpois(n * p, exp(1 + 0.8 * eta)), n, p,
+            dimnames = list(paste0("site", 1:n), paste0("sp", 1:p)))
 
+fit <- rrGDM(Y, env, k = 2,
+             formula = ~ temp + moist,
+             family = "binomial")
+
+anova(fit)
+anova(fit, separate = TRUE)
 }
 \seealso{
 \code{\link{wald_test}} for per-term tests, effect sizes and

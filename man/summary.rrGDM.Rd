@@ -25,10 +25,10 @@ Summarises a fitted \code{rrGDM} object. The summary reports:
   \item the model call and the (approximate marginal) log-likelihood;
   \item for each predictor in the mean model, the effect size
     (\code{Size}, the modulus of its loadings across the latent
-    dimensions) and a multivariate Wald test (see \code{\link{wald_test}})
+    dimensions) and a multivariate Wald test (see \code{\link{wald_test}});
   \item the intercept and slopes of the dispersion model (effects on
     \eqn{\log(\tau)}, where \eqn{\tau} is the sample-level SD), with
-    univariate Wald z-tests
+    univariate Wald z-tests;
   \item the standard deviation of additional random effects, if any;
   \item the observation-level (pairwise) parameter of the response
     distribution, if the family has one (\code{phi} for beta and
@@ -50,9 +50,13 @@ between observed and fitted dissimilarities. Both indicate how well the
 latent space captures the dissimilarities, but not the explanatory power of
 the predictors.
 
-If the model was fitted without standard errors (\code{se = FALSE}, or the
-Hessian could not be computed), a warning is issued and only point
-estimates are reported.
+If the model was fitted without standard errors (\code{se = FALSE}), the
+Hessian at the optimum is not positive definite, or the covariance matrix of
+the estimates is missing, a warning is issued and only point estimates are
+reported.
+
+If the stress or corR2 cannot be computed, a warning is given and the value
+is \code{NA}.
 }
 \seealso{
 \code{\link{wald_test}}, \code{\link{stress}}, \code{\link{cor_r2}}

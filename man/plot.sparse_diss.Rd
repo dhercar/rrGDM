@@ -61,14 +61,3 @@ matrix, with the selected pairs drawn as segments between samples.
 The PCoA is computed on the full dissimilarity matrix, on the link scale (see
 \code{k_pcoa} and \code{link} in \code{\link{sparse_diss}}).
 }
-\examples{
-\dontrun{
-sp <- sparse_diss(gllvm::microbialdata$Y, knn = 5, seed = 1)
-plot(sp)
-plot(sp, edge_col_by = 'diss', edge_alpha = 0.2)
-
-sp3 <- sparse_diss(gllvm::microbialdata$Y, k_pcoa = 3, seed = 1)
-plot(sp3, k = c(2, 3))
-}
-
-}

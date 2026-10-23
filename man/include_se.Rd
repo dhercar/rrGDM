@@ -4,16 +4,35 @@
 \alias{include_se}
 \title{Calculate standard errors}
 \usage{
-include_se(obj, ...)
+include_se(object, ...)
 }
 \arguments{
-\item{obj}{A fitted rrgdm object}
+\item{object}{A fitted \code{rrGDM} object.}
 
-\item{...}{Parameters passed to `TMB::sdreport()`}
+\item{...}{Further arguments passed to \code{\link[TMB]{sdreport}}.}
 }
 \value{
 A model object, including the sd report
 }
 \description{
 Calculate standard errors
+}
+\examples{
+set.seed(2)
+# simulate data
+n <- 25 # sites
+p <- 25 # species
+env <- data.frame(temp = rnorm(n), moist = rnorm(n))
+eta <- as.matrix(env) \%*\% matrix(rnorm(2 * p), 2, p)
+Y <- matrix(rpois(n * p, exp(1 + 0.8 * eta)), n, p,
+            dimnames = list(paste0("site", 1:n), paste0("sp", 1:p)))
+
+# fit model
+fit <- rrGDM(Y, env, k = 2,
+             formula = ~ temp + moist,
+             family = "binomial")
+
+fit0 <- rrGDM(Y, env, k = 2, formula = ~ temp + moist, family = "binomial", se = FALSE)
+fit0 <- include_se(fit0)
+wald_test(fit0)
 }

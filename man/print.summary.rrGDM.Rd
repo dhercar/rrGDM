@@ -15,6 +15,9 @@ estimates and effect sizes. Default is 4.}
 
 \item{...}{Currently unused.}
 }
+\value{
+Invisibly returns \code{x}.
+}
 \description{
 Print method for summary.rrGDM objects
 }

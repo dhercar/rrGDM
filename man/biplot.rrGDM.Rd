@@ -8,7 +8,7 @@
   x,
   k = c(1, 2),
   rotate = TRUE,
-  type = "conditional",
+  type = c("conditional", "marginal"),
   col_by = NULL,
   shape_by = NULL,
   add_points = TRUE,
@@ -30,16 +30,18 @@ plot. Default is \code{c(1, 2)}.}
 
 \item{rotate}{Logical indicating whether to apply varimax rotation
 (via \code{\link[stats]{varimax}}) before plotting. Default is
-\code{TRUE}. The result of varimax rotation is that ordination axes are ordered relative to their
-associated importance.}
+\code{TRUE}. Varimax rotates the axes towards simple structure; it does
+not order them by variance explained. As in \code{\link{get_LV}}, the
+rotation is estimated from the conditional coordinates (\code{L}), whatever
+the \code{type} plotted.}
 
 \item{type}{Character string: either \code{'conditional'} (site scores
 including sample-level error, \code{L}) or \code{'marginal'} (site
 scores as determined by environmental loadings only, \code{L_m}). Default is
 \code{'conditional'}.}
 
-\item{col_by}{Optional character string naming a variable
-used to colour points. Ignored if \code{add_points = FALSE}.}
+\item{col_by}{Optional character string naming a variable in
+\code{x$X} used to colour points. Ignored if \code{add_points = FALSE}.}
 
 \item{shape_by}{Optional character string naming a variable in
 \code{x$X} used to shape points. Ignored if \code{add_points = FALSE}.}
