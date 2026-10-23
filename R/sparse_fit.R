@@ -5,33 +5,31 @@
 #' such that every sample is in exactly the same number of pairs
 #' (\code{knn + n_random}). Each sample is paired with its \code{knn} nearest
 #' neighbours, which inform its local position, and with \code{n_random}
-#' random samples, which ensure that the global structure (including large
-#' dissimilarities) is represented. Selection is based on the observed
+#' random samples, which ensure that the global structure (including distant samples)
+#' is represented. Selection is based on the observed
 #' dissimilarities only.
 #'
 #' @param Y A community matrix or data frame (samples x species), or an object
 #'   of class \code{\link[stats]{dist}}. If a \code{dist} object is supplied,
 #'   \code{dist_method}, \code{trans} and \code{binary} are ignored.
 #' @param knn Integer. Number of nearest neighbours per sample. Default is 10.
-#' @param n_random Integer. Number of random pairs per sample. These connect
-#'   the graph and counteract the bias towards small dissimilarities caused by
-#'   keeping only neighbours. Default is 3.
+#' @param n_random Integer. Number of random pairs per sample. Default is 3.
 #' @param max_zeros Integer or \code{Inf}. Maximum number of pairs with a
-#'   dissimilarity of exactly 0 per sample. Default is 1.
-#' @param dist_method Dissimilarity index (see \code{\link{make_Y_diss}}).
+#'   dissimilarity of exactly 0 per sample. Default is \code{Inf}.
+#' @param dist_method Dissimilarity index.
 #'   Default is \code{'bray'}.
 #' @param trans Transformation applied to \code{Y} before calculating
 #'   dissimilarities. Default is no transformation.
 #' @param binary Logical indicating whether \code{Y} should be converted to
 #'   presence-absence before calculating dissimilarities. Default is FALSE.
 #' @param k_pcoa Integer (at least 2) or \code{NULL}. Number of PCoA axes of the
-#'   full dissimilarity matrix stored for \code{\link{plot.sparse_diss}}. Use
-#'   \code{NULL} to skip it (slow for thousands of samples). Default is 2.
+#'   full dissimilarity matrix stored for 2D representation. Use
+#'   \code{NULL} to skip it. Default is 2.
 #' @param link Character string: \code{'identity'} (default), \code{'negexp'} or
 #'   \code{'neggaus'}. Link function of the model to be fitted (see
 #'   \code{\link{rrGDM}}). The PCoA is computed on dissimilarities transformed to
 #'   the scale of latent distances (e.g. \code{-log(1 - diss)} for
-#'   \code{'negexp'}; dissimilarities above 0.99 are set to 0.99). It does not
+#'   \code{'negexp'}. Dissimilarities above 0.99 are set to 0.99). This does not
 #'   affect which pairs are selected.
 #' @param seed An integer specifying the seed for random number generation.
 #'   Default is NULL.
@@ -46,9 +44,9 @@
 #' \code{degree} gives the number of pairs per sample.
 #'
 #' @details
-#' Pairs are sorted by dissimilarity (ties at random) and kept if both samples
+#' Pairs are sorted by dissimilarity and kept if both samples
 #' have fewer than \code{knn} pairs (and fewer than \code{max_zeros} for zero
-#' dissimilarities). The remaining slots, up to \code{knn + n_random}, are
+#' dissimilarities). The remaining pairs up to \code{knn + n_random}, are
 #' filled with random pairs among samples with free slots. Because the number of
 #' pairs per sample is fixed, a sample may be paired with a sample that is not
 #' among its own \code{knn} nearest neighbours.
@@ -70,7 +68,7 @@
 #' plot(sp, k = c(1, 3))
 #'
 #' # Fit the model using the selected pairs only
-#' m1 <- rrGDM(Y = com, X = env, k = 2, sparse = sp)
+#' m1 <- rrGDM(Y = com, X = env, k = 2, sparse = sp, family = 'binomial')
 #' }
 #'
 #' @importFrom stats cmdscale as.dist runif
@@ -86,7 +84,7 @@ sparse_diss <- function(Y,
                         link = 'identity',
                         seed = NULL) {
 
-  # ---------------------- Initial checks ---------------------
+  #  Initial checks
   is_count <- function(v, allow_inf = FALSE) {
     if (!is.numeric(v) || length(v) != 1 || is.na(v) || v < 0) return(FALSE)
     (is.infinite(v) && allow_inf) || (is.finite(v) && v == round(v))
@@ -96,6 +94,7 @@ sparse_diss <- function(Y,
     cli::cli_abort(c("{.arg Y} must be a sample x species matrix, data frame or {.cls dist} object.",
                      "x" = "You have supplied a {.cls {class(Y)}}"))
   }
+
   if (!is_count(knn)) {
     cli::cli_abort("{.arg knn} must be a single non-negative integer.")
   }
@@ -115,7 +114,7 @@ sparse_diss <- function(Y,
   link <- match.arg(link, c('identity', 'negexp', 'neggaus'))
   if (!is.null(seed)) set.seed(seed)
 
-  # ---------------------- Dissimilarity matrix ---------------------
+  # Dissimilarity matrix
   if (inherits(Y, 'dist')) {
     D <- as.matrix(Y)
     n <- nrow(D)
@@ -130,7 +129,7 @@ sparse_diss <- function(Y,
 
     Y_df <- make_Y_diss(Y, method = dist_method, trans = trans, binary = binary)
     if (max(Y_df$s2) != n) {
-      cli::cli_abort("Samples were removed while calculating dissimilarities; {.fn sparse_diss} requires all samples to be retained.")
+      cli::cli_abort("Samples were removed while calculating dissimilarities. {.fn sparse_diss} requires all samples to be retained.")
     }
     D <- matrix(0, n, n)
     D[as.matrix(Y_df[, c('s1', 's2')])] <- Y_df$diss
@@ -150,9 +149,7 @@ sparse_diss <- function(Y,
   is_zero <- (D == 0)
   diag(is_zero) <- FALSE
 
-  # ---------------------- 1. Similar samples ---------------------
-  # Go through all pairs from most to least similar (ties at random) and keep
-  # a pair if both samples still have a free slot (zeros also need free zero slots)
+  #Similar samples
   ij <- which(upper.tri(D), arr.ind = TRUE)
   ord <- order(D[ij], stats::runif(nrow(ij)))
   a <- ij[ord, 1]
@@ -181,12 +178,8 @@ sparse_diss <- function(Y,
       if (n_open < 2L) break
     }
   }
-  # ---------------------- 2. Random pairs ---------------------
-  # Complete one sample at a time (the one with most free slots first), pairing
-  # it with random samples that still have free slots; then retire it. If a
-  # sample cannot be completed (its remaining partners are already paired with
-  # it), an existing pair (c, d) is replaced by (a, c) and (b, d), where b is
-  # another sample with free slots (or a itself).
+
+  # Random pairs
   paired <- matrix(FALSE, n, n)
   paired[cbind(a[keep], b[keep])] <- TRUE
   paired <- paired | t(paired)
@@ -228,13 +221,15 @@ sparse_diss <- function(Y,
     paired[E[r, 2], E[r, 1]] <- FALSE
     is_near[E[r, 1], E[r, 2]] <- FALSE
     is_near[E[r, 2], E[r, 1]] <- FALSE
-    paired[i, cc] <- TRUE; paired[cc, i] <- TRUE
-    paired[j, dd] <- TRUE; paired[dd, j] <- TRUE
+    paired[i, cc] <- TRUE
+    paired[cc, i] <- TRUE
+    paired[j, dd] <- TRUE
+    paired[dd, j] <- TRUE
     slots[i] <- slots[i] - 1L
     slots[j] <- slots[j] - 1L
   }
 
-  # ---------------------- Assemble pairs ---------------------
+  # Assemble pairs
   idx <- which(paired & upper.tri(paired), arr.ind = TRUE)
   idx <- idx[order(idx[, 1], idx[, 2]), , drop = FALSE]
   s1 <- as.integer(idx[, 1])
@@ -247,7 +242,7 @@ sparse_diss <- function(Y,
                       type = type,
                       stringsAsFactors = FALSE)
 
-  # ---------------------- Graph summaries ---------------------
+  #  Graph summaries
   degree <- tabulate(c(s1, s2), nbins = n)
   names(degree) <- id
   n_components <- max(graph_components(n, s1, s2))
@@ -266,17 +261,17 @@ sparse_diss <- function(Y,
     ))
   }
 
-  # ---------------------- PCoA for plotting ---------------------
+  #  PCoA
   pcoa_res <- NULL
   if (!is.null(k_pcoa)) {
     k_pcoa <- min(as.integer(k_pcoa), n - 1L)
     D_link <- switch(link,
                      'identity' = D,
-                     'negexp'   = -log(1 - pmin(D, 0.99)),
-                     'neggaus'  = sqrt(-log(1 - pmin(D, 0.99))))
+                     'negexp' = -log(1 - pmin(D, 0.99)),
+                     'neggaus' = sqrt(-log(1 - pmin(D, 0.99))))
     pc <- tryCatch(suppressWarnings(stats::cmdscale(stats::as.dist(D_link), k = k_pcoa, eig = TRUE)),
                    error = function(e) {
-                     cli::cli_warn(c("!" = "PCoA could not be computed; {.fn plot} will not be available.",
+                     cli::cli_warn(c("!" = "PCoA could not be computed. {.fn plot} will not be available.",
                                      "i" = "Original error: {conditionMessage(e)}"))
                      NULL
                    })
@@ -292,7 +287,7 @@ sparse_diss <- function(Y,
                        var_exp = pc$eig[seq_len(k_got)] / sum(pos_eig),
                        k = k_got)
     } else if (!is.null(pc)) {
-      cli::cli_warn("Fewer than 2 PCoA axes with positive eigenvalues; {.fn plot} will not be available.")
+      cli::cli_warn("Fewer than 2 PCoA axes with positive eigenvalues. {.fn plot} will not be available.")
     }
   }
 
@@ -345,7 +340,6 @@ graph_components <- function(n, s1, s2) {
       queue <- nb
     }
   }
-
   comp
 }
 
@@ -405,7 +399,7 @@ print.sparse_diss <- function(x, digits = 3, ...) {
   print(d[d$n != '0', , drop = FALSE], row.names = FALSE, right = TRUE)
 
   if (x$n_zero_pairs > 0) {
-    cat(sprintf("\n  %s pair%s with zero dissimilarity in the full data; %s kept.\n",
+    cat(sprintf("\n  %s pair%s with zero dissimilarity in the full data. %s kept.\n",
                 fmt_int(x$n_zero_pairs), if (x$n_zero_pairs == 1) '' else 's',
                 fmt_int(sum(p$diss == 0))))
   }
@@ -443,7 +437,7 @@ print.sparse_diss <- function(x, digits = 3, ...) {
 #'   \code{c(1, 2)}.
 #' @param edge_types Optional character vector with the type of pairs to draw
 #'   (any of \code{'knn'}, \code{'random'}, \code{'zero'}).
-#'   Default is \code{NULL}, which draws all of them.
+#'   Default is \code{NULL} (all).
 #' @param edge_col_by Character string: colour segments by pair \code{'type'}
 #'   (default) or by dissimilarity (\code{'diss'}).
 #' @param edge_alpha Numeric transparency of segments. Default is 0.4.
@@ -494,7 +488,7 @@ plot.sparse_diss <- function(x,
     ))
   }
 
-  # ---------------------- Initial checks ---------------------
+  # checks
   if (!inherits(x, 'sparse_diss')) {
     cli::cli_abort("{.arg x} must be a {.cls sparse_diss} object.")
   }
@@ -505,7 +499,9 @@ plot.sparse_diss <- function(x,
   if (!is.numeric(k) || length(k) != 2 || anyNA(k) || any(k != as.integer(k))) {
     cli::cli_abort("{.arg k} must be an integer vector of length 2 (e.g. {.code c(1, 2)}).")
   }
+
   k <- as.integer(k)
+
   if (k[1] == k[2]) {
     cli::cli_abort("{.arg k} must reference two distinct PCoA axes.")
   }
@@ -537,7 +533,7 @@ plot.sparse_diss <- function(x,
   coords$PCoA.1 <- coords[[paste0('PCoA', k[1])]]
   coords$PCoA.2 <- coords[[paste0('PCoA', k[2])]]
 
-  # ---------------------- Segments ---------------------
+  #  Segments (edges)
   seg <- x$pairs[x$pairs$type %in% edge_types, , drop = FALSE]
   seg$type <- factor(seg$type, levels = all_types)
   seg <- seg[order(seg$type), , drop = FALSE]
@@ -546,7 +542,7 @@ plot.sparse_diss <- function(x,
   seg$x2 <- coords$PCoA.1[seg$s2]
   seg$y2 <- coords$PCoA.2[seg$s2]
 
-  # ---------------------- Base plot ---------------------
+  #  Base plot
   plot_obj <- ggplot2::ggplot(coords, ggplot2::aes(x = .data$PCoA.1, y = .data$PCoA.2)) +
     ggplot2::coord_equal() +
     ggplot2::xlab(sprintf('PCoA %d (%.1f%%)', k[1], 100 * var_exp[k[1]])) +
@@ -554,16 +550,13 @@ plot.sparse_diss <- function(x,
 
   if (nrow(seg) > 0) {
     if (edge_col_by == 'type') {
-      type_cols <- c(random = '#0072B2', zero = '#009E73', knn = '#555555')
       plot_obj <- plot_obj +
         ggplot2::geom_segment(data = seg,
                               ggplot2::aes(x = .data$x1, y = .data$y1,
                                            xend = .data$x2, yend = .data$y2,
                                            colour = .data$type),
                               alpha = edge_alpha,
-                              linewidth = edge_linewidth) +
-        ggplot2::scale_colour_manual(values = type_cols, breaks = intersect(rev(all_types), unique(as.character(seg$type))),
-                                     name = 'Pair type')
+                              linewidth = edge_linewidth)
     } else {
       plot_obj <- plot_obj +
         ggplot2::geom_segment(data = seg,
@@ -571,8 +564,7 @@ plot.sparse_diss <- function(x,
                                            xend = .data$x2, yend = .data$y2,
                                            colour = .data$diss),
                               alpha = edge_alpha,
-                              linewidth = edge_linewidth) +
-        ggplot2::scale_colour_viridis_c(name = 'Dissimilarity')
+                              linewidth = edge_linewidth)
     }
   } else {
     cli::cli_warn("No pairs of the requested {.arg edge_types} were found in the object.")
