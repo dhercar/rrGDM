@@ -5,6 +5,7 @@
 
 <!-- badges: start -->
 
+[![R-CMD-check](https://github.com/dhercar/rrGDM/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/dhercar/rrGDM/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
 `rrGDM` fits Reduced Rank Generalised Dissimilarity Models (RRGDM): an
@@ -161,10 +162,6 @@ plot(pred_Y, m1$Y_diss / m1$Y_den,
 abline(0, 1)
 
 pred_Y <- predict(m1, conditional = FALSE)[, 4]
-#> ℹ Random-effect terms such as `(1 | group)` are not included: only fixed
-#>   effects and sample-level dispersion are used.
-#> • Expected dissimilarities between samples will be understated if group-level
-#>   variance is large.
 R2_cor <-  round(cor(pred_Y, m1$Y_diss / m1$Y_den)^2,2)
 plot(pred_Y, m1$Y_diss / m1$Y_den,
      ylab = 'observed', xlab = 'predicted', main = paste0('conditional, Pseudo-R2: ', R2_cor))
@@ -201,7 +198,7 @@ latent distances against the observed dissimilarities:
 
 ``` r
 stress(m1)
-#> [1] 0.1180447
+#> [1] 0.1180439
 ```
 
 ### Visualising partial effects in ordination space
@@ -230,10 +227,6 @@ pred_ord_2 <- predict(m1,
                        sample_param = FALSE, 
                        sim_site = TRUE,   
                        n_sim = 1000)
-#> ℹ Random-effect terms such as `(1 | group)` are not included: only fixed
-#>   effects and sample-level dispersion are used.
-#> • Expected dissimilarities between samples will be understated if group-level
-#>   variance is large.
 
 # Generating preedictions
 ggplot(pred_ord_2, aes(x = L.1, y = L.2)) +

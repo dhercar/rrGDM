@@ -6,3 +6,6 @@
 .quarto
 .dll
 .o
+src/*.o
+src/*.dll
+src/*.so

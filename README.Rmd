@@ -20,6 +20,7 @@ knitr::opts_chunk$set(
 
 <!-- badges: start -->
 
+[![R-CMD-check](https://github.com/dhercar/rrGDM/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/dhercar/rrGDM/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
 `rrGDM` fits Reduced Rank Generalised Dissimilarity Models (RRGDM): an
