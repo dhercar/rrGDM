@@ -109,10 +109,10 @@ Type objective_function<Type>::operator() ()
     }
 
     // for stability
-    if (family == 1 || family == 2 || family == 3) {
-      if (mu < Type(1e-8)) mu = Type(1e-8);
-      if (mu > Type(1.0 - 1e-8)) mu = Type(1.0 - 1e-8);
-    }
+    //if (family == 1 || family == 2 || family == 3) {
+    //  if (mu < Type(1e-8)) mu = Type(1e-8);
+    //  if (mu > Type(1.0 - 1e-8)) mu = Type(1.0 - 1e-8);
+    //}
     mu_vec(i) = mu;
   }
 
