@@ -6,23 +6,25 @@ Authors@R: c(
     person(
       "Daniel", "Hernandez Carrasco",
       email = "dani.hc97@gmail.com",
-      role = c("aut", "cre")
+      role = c("aut", "cre", "cph"),
+      comment = c(ORCID = "0000-0002-1639-7511")
     )
   )
-Description: Fits Reduced Rank Generalised Dissimilarity Models (RRGDM), which extend
+Language: en-GB
+Description: Tools for fitting and interrogating Reduced-Rank Generalised Dissimilarity Models (RRGDM). RRGDM extends
     classic Generalised Dissimilarity Models by embedding sites in a low-dimensional
     latent space via 'TMB' (Template Model Builder). Environmental predictors, random
     effects, and effects on dispersion can all be specified directly on the latent
-    positions rather than on pairwise distances, unifying community ordination and
-    dissimilarity regression within a single likelihood-based framework. Includes
+    positions rather than on pairwise distances, unifying ordination and
+    dissimilarity regression within a single framework. Includes
     tools for model fitting, prediction, inference on environmental loadings and
     dispersion effects, goodness-of-fit assessment, and visualisation of model-based ordination.
-License: MIT + file LICENSE
+License: GPL (>= 2)
 Encoding: UTF-8
 LazyData: true
 RoxygenNote: 7.3.3
 Imports:
-  TMB,
+  TMB (>= 1.9.0),
   cli,
   vegan,
   Matrix,
@@ -30,13 +32,15 @@ Imports:
   reformulas,
   stats,
   grid,
-  utils
+  utils,
+  rlang
 LinkingTo: 
   TMB,
   RcppEigen
 URL: https://github.com/dhercar/rrGDM
 BugReports: https://github.com/dhercar/rrGDM/issues
 Suggests: 
-    testthat (>= 3.0.0),
-    ggplot2
+    ggplot2 (>= 3.4.0),
+    gllvm
 Config/testthat/edition: 3
+Depends: R (>= 3.6.2)
