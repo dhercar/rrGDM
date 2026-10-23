@@ -66,8 +66,7 @@
 #' \code{knn + n_random} are odd. A warning is given if some samples fall short
 #' or if the pairs do not connect all samples (increase \code{n_random}).
 #'
-#' @seealso \code{\link{plot.sparse_diss}}, \code{\link{print.sparse_diss}},
-#'   \code{\link{make_Y_diss}}
+#' @seealso \code{\link{plot.sparse_diss}}, \code{\link{print.sparse_diss}}
 #'
 #' @importFrom stats cmdscale as.dist runif
 #' @export
