@@ -13,7 +13,7 @@ Type objective_function<Type>::operator() ()
   DATA_SPARSE_MATRIX(Z);  // other random effects
   DATA_INTEGER(has_sample_re);  // flag for re (sample-level)
   DATA_INTEGER(has_random);   // flag for re (other)
-  DATA_INTEGER(family);    // family (0 = normal, 1 = binomial, 2 = beta), 3 = betabinomial)
+  DATA_INTEGER(family);    // family (0 = gaussian, 1 = binomial, 2 = beta, 3 = beta-binomial)
   DATA_INTEGER(link);    // link (0 = identity, 1 = neg_exp, 2 = neg_gaus)
   DATA_INTEGER(constraint);  // flag for constraint (0 = none, 1 = lambda, 2 = site re)
   DATA_IVECTOR(map_re);  // mapping of RE columns to vars
@@ -22,22 +22,22 @@ Type objective_function<Type>::operator() ()
   // Parameters
   PARAMETER_MATRIX(lambda);  // env. loadings
   PARAMETER_MATRIX(u_sample);   // U (sample-level error)
-  PARAMETER(log_scale);     // Scale parameter (dispersion)
+  PARAMETER(log_scale);     // log pair-level error: SD (gaussian) or phi (beta, beta-binomial)
   PARAMETER_VECTOR(beta);   // effects on sigma (dispersion)
   PARAMETER_MATRIX(u);  // additional random effects
   PARAMETER_VECTOR(log_sigma_re);  // vector of SD for each RE term
 
   // Derived variables
   int n_pairs = Y.size();   // number of pairs (dissimilarities)
-  int n_samples = X.rows();  // number of samples (dissimilarities)
+  int n_samples = X.rows();  // number of samples
   int n_env = X.cols();     // number of env. variables
 
-  vector<Type> sigma_re = exp(log_sigma_re); // sigma of sample error
+  vector<Type> sigma_re = exp(log_sigma_re); // SD of each additional random effect
   Type SD = 0;     // SD of Gaussian family (pair error)
   Type phi = 0;    // phi of beta (and beta binomial) distribution (pair error)
 
 
-  // ---------- 3. LATENT COMPOSITIONS ---------
+  // ---------- LATENT COORDINATES ----------
   matrix<Type> L_m = X * lambda;
   matrix<Type> L = L_m;
 
@@ -52,7 +52,7 @@ Type objective_function<Type>::operator() ()
   //  SD model
   vector<Type> l_sample_sd = W * beta.matrix();
 
-  // U likelihood contr. to likelihood
+  // Sample-level errors: u_sample ~ N(0, exp(W * beta)^2)
   Type nll = 0.0;
   if (has_sample_re) {
     for (int i = 0; i < n_samples; i++) {
@@ -60,14 +60,14 @@ Type objective_function<Type>::operator() ()
       for (int j = 0; j < n_lv; j++) {
         if (constraint == 2 && j > i) continue;  // Skip upper triangle if constraint == 2
         nll -= dnorm(u_sample(i, j), Type(0), sample_sd_i, true);
-  }}}
+      }}}
 
   // Other random effects: contribution to NLL
   if (has_random) {
     for (int i = 0; i < u.rows(); i++) {
       for (int k = 0; k < n_lv; k++) {
         nll -= dnorm(u(i, k), Type(0), sigma_re(map_re[i]), true);
-  }}}
+      }}}
 
 
   // Distribution-specific scale parameters
@@ -78,7 +78,6 @@ Type objective_function<Type>::operator() ()
   }
 
   //----------PAIRWISE LOOP (START)----------
-  // !!! Could use matrix multiplication instead, left as loop to allow parallel comp.
   vector<Type> mu_vec(n_pairs);
   for (int i = 0; i < n_pairs; i++) {
 
@@ -93,7 +92,7 @@ Type objective_function<Type>::operator() ()
       dist_2 += diff * diff;
     }
 
-    dist_2 += Type(1e-10);   // avoid exact 0
+    dist_2 += Type(1e-10);   // keeps sqrt() and its gradient finite when two samples coincide
     Type dist = sqrt(dist_2);
 
     // Inverse link
@@ -110,6 +109,7 @@ Type objective_function<Type>::operator() ()
     break;
     }
 
+    // Keep mu strictly inside (0, 1). No branch on mu itself: TMB freezes branches on AD values.
     if (family != 0) mu = Type(1e-9) + (Type(1) - Type(2e-9)) * mu;
     mu_vec(i) = mu;
   }
@@ -118,27 +118,27 @@ Type objective_function<Type>::operator() ()
 
   // likelihood
   switch (family) {
-    case 0: // Gaussian
-      nll -= sum(dnorm(Y, mu_vec, SD, true));
+  case 0: // Gaussian
+    nll -= sum(dnorm(Y, mu_vec, SD, true));
+    break;
+  case 1: // Binomial
+    nll -= sum(dbinom(Y, Y_den, mu_vec, true));
+    break;
+  case 2: { // Beta
+      vector<Type> a = mu_vec * phi;
+      vector<Type> b = (Type(1.0) - mu_vec) * phi;
+      nll -= sum(dbeta(Y, a, b, true));
       break;
-    case 1: // Binomial
-      nll -= sum(dbinom(Y, Y_den, mu_vec, true));
-      break;
-    case 2: { // Beta
-        vector<Type> a = mu_vec * phi;
-        vector<Type> b = (Type(1.0) - mu_vec) * phi;
-        nll -= sum(dbeta(Y, a, b, true));
-        break;
-      }
-    case 3: { // Beta-Binomial
-      for(int i = 0; i < n_pairs; i++) {
-      Type a = mu_vec(i) * phi;
-      Type b = (Type(1.0) - mu_vec(i)) * phi;
-      nll -= lgamma(Y_den(i) + Type(1)) - lgamma(Y(i) + Type(1)) - lgamma(Y_den(i) - Y(i) + Type(1))
-        + lgamma(Y(i) + a) + lgamma(Y_den(i) - Y(i) + b) - lgamma(Y_den(i) + a + b)
-        - lgamma(a) - lgamma(b) + lgamma(a + b);
     }
-      break;
+  case 3: { // Beta-Binomial
+    for(int i = 0; i < n_pairs; i++) {
+    Type a = mu_vec(i) * phi;
+    Type b = (Type(1.0) - mu_vec(i)) * phi;
+    nll -= lgamma(Y_den(i) + Type(1)) - lgamma(Y(i) + Type(1)) - lgamma(Y_den(i) - Y(i) + Type(1))
+      + lgamma(Y(i) + a) + lgamma(Y_den(i) - Y(i) + b) - lgamma(Y_den(i) + a + b)
+      - lgamma(a) - lgamma(b) + lgamma(a + b);
+  }
+    break;
   }}
 
   // Derived quantities:
