@@ -79,8 +79,8 @@ initial_loadings <- function(Y,
   }
 
   D_linear <- switch(link,
-                     negexp   = -log(1 - D),
-                     neggaus  = sqrt(-log(1 - D)),
+                     negexp = -log(1 - D),
+                     neggaus = sqrt(-log(1 - D)),
                      identity = D,
                      cli::cli_abort("Link {.val {link}} is not supported."))
 

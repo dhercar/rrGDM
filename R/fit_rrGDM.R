@@ -148,7 +148,7 @@ rrGDM <- function(Y,
   }
   if (!is.null(scale_diss) &&
       !(is.numeric(scale_diss) && length(scale_diss) == 2 && !anyNA(scale_diss) && scale_diss[1] != scale_diss[2])) {
-    cli::cli_abort("{.arg scale_diss} must be {.val NULL} or two different numbers, e.g. {.code c(0.01, 0.99)}.")
+    cli::cli_abort("{.arg scale_diss} must be {.code NULL} or two different numbers, e.g. {.code c(0.01, 0.99)}.")
   }
   if (!is.logical(previous_best) || length(previous_best) != 1 || is.na(previous_best)) {
     cli::cli_abort("{.arg previous_best} must be either TRUE or FALSE.")

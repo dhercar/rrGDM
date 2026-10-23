@@ -6,10 +6,10 @@
 #'   \item the model call and the (approximate marginal) log-likelihood;
 #'   \item for each predictor in the mean model, the effect size
 #'     (\code{Size}, the modulus of its loadings across the latent
-#'     dimensions) and a multivariate Wald test (see \code{\link{wald_test}})
+#'     dimensions) and a multivariate Wald test (see \code{\link{wald_test}});
 #'   \item the intercept and slopes of the dispersion model (effects on
 #'     \eqn{\log(\tau)}, where \eqn{\tau} is the sample-level SD), with
-#'     univariate Wald z-tests
+#'     univariate Wald z-tests;
 #'   \item the standard deviation of additional random effects, if any;
 #'   \item the observation-level (pairwise) parameter of the response
 #'     distribution, if the family has one (\code{phi} for beta and
@@ -34,9 +34,13 @@
 #' latent space captures the dissimilarities, but not the explanatory power of
 #' the predictors.
 #'
-#' If the model was fitted without standard errors (\code{se = FALSE}, or the
-#' Hessian could not be computed), a warning is issued and only point
-#' estimates are reported.
+#' If the model was fitted without standard errors (\code{se = FALSE}), the
+#' Hessian at the optimum is not positive definite, or the covariance matrix of
+#' the estimates is missing, a warning is issued and only point estimates are
+#' reported.
+#'
+#' If the stress or corR2 cannot be computed, a warning is given and the value
+#' is \code{NA}.
 #'
 #' @return
 #' A list of class \code{summary.rrGDM}, with elements including
@@ -66,7 +70,9 @@ summary.rrGDM <- function(object, ...) {
   sd_rep <- object$sd_rep
   has_sd_rep <- !is.null(sd_rep)
   pd_ok <- has_sd_rep && isTRUE(hess_ok(object))
-  has_se <- pd_ok   # no SEs / Wald tests if there is no sd_rep or the Hessian is not usable
+  has_cov <- has_sd_rep && is.matrix(sd_rep$cov)
+  # no SEs / Wald tests if there is no sd_rep, the Hessian is not usable or the covariance is missing
+  has_se <- pd_ok && has_cov
   has_sample_re <- !is.null(report$u_sample)
 
   n_env <- ncol(object$X_design)
@@ -81,6 +87,11 @@ summary.rrGDM <- function(object, ...) {
     cli::cli_warn(c(
       "!" = "The Hessian at the optimum is not positive definite (or is nearly singular): standard errors and Wald tests are omitted.",
       "i" = "Only point estimates are reported."
+    ))
+  } else if (!has_cov) {
+    cli::cli_warn(c(
+      "!" = "The covariance matrix of the {.field sd_rep} is missing: standard errors and Wald tests are omitted.",
+      "i" = "Run {.fn include_se} on the fitted object without {.code getReportCovariance = FALSE}."
     ))
   }
 
@@ -153,10 +164,15 @@ summary.rrGDM <- function(object, ...) {
   aic <- 2 * df - 2 * loglik
 
   #  FIT OF THE LATENT SPACE (i.e., conditional fit)
-  safe <- function(expr) tryCatch(expr, error = function(e) NA_real_)
-  stress_metric <- safe(stress(object, type = "metric", scale = "response"))
-  stress_nonmetric <- safe(stress(object, type = "nonmetric", scale = "link"))
-  r2 <- safe(cor_r2(object, message = FALSE))
+  safe <- function(expr, what) {
+    tryCatch(expr, error = function(e) {
+      cli::cli_warn("Could not compute {what}: {conditionMessage(e)}")
+      NA_real_
+    })
+  }
+  stress_metric <- safe(stress(object, type = "metric", scale = "response"), "the metric stress")
+  stress_nonmetric <- safe(stress(object, type = "nonmetric", scale = "link"), "the non-metric stress")
+  r2 <- safe(cor_r2(object, message = FALSE), "corR2")
 
   res <- list(
     call = object$call,
@@ -189,6 +205,8 @@ summary.rrGDM <- function(object, ...) {
 #' @param digits Number of significant digits for test statistics,
 #'   estimates and effect sizes. Default is 4.
 #' @param ... Currently unused.
+#'
+#' @return Invisibly returns \code{x}.
 #' @export
 #' @method print summary.rrGDM
 print.summary.rrGDM <- function(x, digits = 4, ...) {
@@ -210,6 +228,7 @@ print.summary.rrGDM <- function(x, digits = 4, ...) {
     if (x$has_se) {
       d$Wald <- round(d$Wald, 3)
       d$Pr_Chisq <- format_pval(d$Pr_Chisq)
+      d$Sig[is.na(d$Sig)] <- " "   # NA is printed as blank
     } else {
       d <- d[, c("term", "Size"), drop = FALSE]
     }
@@ -227,6 +246,7 @@ print.summary.rrGDM <- function(x, digits = 4, ...) {
       d$SE <- fmt_num(d$SE)
       d$z <- fmt_num(d$z)
       d$Pr_z <- format_pval(d$Pr_z)
+      d$Sig[is.na(d$Sig)] <- " "
     } else {
       d <- d[, c("term", "Estimate"), drop = FALSE]
     }

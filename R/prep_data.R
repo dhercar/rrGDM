@@ -8,7 +8,6 @@ prepare_data <- function(formula = NULL,
                          data = NULL,
                          n = NULL) {
 
-  # ---- validate data  ----
   if (is.null(n)) {
     cli::cli_abort(c("{.var n} must be supplied",
                      "x" = "The number of observations is required for design matrix dimensions."))
@@ -43,7 +42,6 @@ prepare_data <- function(formula = NULL,
       "i" = "{.arg X} has {nrow(data)} row{?s}; {.arg Y} has {n}."
     ))
   }
-  # ---- end of data validation ----
 
   if (is.null(formula_sd) || is.null(data)) {
     formula_sd  <- ~1
@@ -112,7 +110,6 @@ prepare_data <- function(formula = NULL,
   # Random parts
   random_parts <- if (!is.null(formula)) reformulas::findbars(formula) else NULL
 
-  # Return with no re
   if ((length(random_parts) == 0) || is.null(data)) {
     Z_design <- Matrix::sparseMatrix(
       i = integer(0), j = integer(0), x = numeric(0), dims = c(n, 1)
@@ -146,7 +143,15 @@ prepare_data <- function(formula = NULL,
     if (re[[2]] == 1) {
       var <- deparse(re[[3]])
       if (!(var %in% colnames(data))) {
-        cli::cli_abort("Variable {.val {var}} not found in the provided data.")
+        cli::cli_abort(c(
+          "Variable {.val {var}} not found in the provided data.",
+          if (grepl(":", var, fixed = TRUE))
+            c("i" = "Nested or crossed groupings such as {.code (1 | a/b)} are not supported: create a single grouping variable in your data.")
+        ))
+      }
+
+      if (var %in% re_vars) {
+        cli::cli_abort("Grouping variable {.val {var}} appears in more than one random-effect term.")
       }
 
       if (anyNA(data[[var]])) {
@@ -156,6 +161,9 @@ prepare_data <- function(formula = NULL,
       factor_vec <- factor(data[[var]])
       re_levels <- levels(factor_vec)
       n_groups <- length(re_levels)
+      if (n_groups < 2) {
+        cli::cli_abort("Grouping variable {.val {var}} must have at least 2 levels.")
+      }
       Z_re <- Matrix::sparse.model.matrix(~0 + factor_vec)
       colnames(Z_re) <- paste0(var, "_", re_levels)
 

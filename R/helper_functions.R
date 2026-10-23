@@ -1,16 +1,18 @@
-#' Given a numeric vector \code{x}, this function re-scales \code{x} into the interval \[\code{min}, \code{max}\].
+#' Map dissimilarities in [0, 1] onto a new interval (internal)
 #'
-#' @param x A numeric vector
-#' @param new_range Numeric scalar: the upper and lower bound of the target interval. Default is \[\code{0.01}, \code{0.99}\].
-#' @return A numeric vector of the same length as \code{x}, with values in the interval \[\code{min(new_range)}, \code{max(new_range)}\].
+#' A linear map of [0, 1] onto \code{new_range}. \code{x} is assumed to lie in
+#' [0, 1] (as bounded dissimilarities do); values outside are mapped linearly and
+#' fall outside \code{new_range}. \code{new_range} is validated in
+#' \code{rrGDM()}.
+#'
+#' @param x A numeric vector with values in [0, 1].
+#' @param new_range Numeric vector of length 2 (the bounds of the target
+#'   interval, in any order) or \code{NULL} to leave \code{x} unchanged.
+#'   Default is c(0.01, 0.99).
+#' @return A numeric vector of the same length as \code{x}.
 #' @noRd
-
 scale_dist <- function(x, new_range = c(0.01, 0.99)) {
   if (!is.null(new_range)) {
-    stopifnot(
-      "x must be numeric" = is.numeric(x),
-      "new_range must be a numeric vector of length 2" = is.numeric(new_range) && length(new_range) == 2,
-      "new_range[1] and new_range[2] cannot be equal" = new_range[1] != new_range[2])
     min(new_range) + x * (max(new_range) - min(new_range))
   } else {
     x
@@ -20,13 +22,14 @@ scale_dist <- function(x, new_range = c(0.01, 0.99)) {
 #' Calculate Numerator and Denominator for Bray-Curtis Dissimilarity
 #'
 #' @description
-#' An internal helper function that computes the individual components of the
-#' Bray-Curtis distance between two vectors. This is used when \code{num_den = TRUE} in the model fitting function
+#' Numerator and denominator of the Bray-Curtis dissimilarity between two sites,
+#' with pairwise deletion of NAs. Used by \code{make_Y_diss()} (\code{num_den = TRUE})
+#' only when the community matrix contains NAs; otherwise it uses vectorised code.
 #'
 #' @param x A numeric vector representing species abundances at site 1.
 #' @param y A numeric vector representing species abundances at site 2.
 #'
-#' @return A named numeric vector of length 2 containing the elements \code{num} and \code{den}.
+#' @return A named numeric vector of length 2 containing the elements \code{num_bra} and \code{den_bra}.
 #' @noRd
 bray_num_den <- function(x, y) {
   num <- sum(abs(x - y), na.rm = TRUE)
@@ -42,14 +45,13 @@ bray_num_den <- function(x, y) {
 make_inv_link <- function(link) {
   switch(link,
          'identity' = function(x) x,
-         'negexp'   = function(x) 1 - exp(-x),
-         'neggaus'  = function(x) 1 - exp(-(x^2)),
+         'negexp' = function(x) -expm1(-x),
+         'neggaus'  = function(x) -expm1(-x^2),
          cli::cli_abort("Link {.val {link}} is not supported."))
 }
 
-
-
 #' Model report at the best-fit parameters (internal)
+#'
 #' `obj$report()` with no argument uses `obj$env$last.par`, which later calls
 #' (e.g. `sdreport`) can overwrite. `best_par` is the snapshot taken after fitting.
 #' @noRd
@@ -66,6 +68,10 @@ format_formula <- function(f) paste(trimws(deparse(f)), collapse = " ")
 
 
 #' Subset a long data frame of dissimilarities to the pairs in a sparse_diss object (internal)
+#'
+#' Rows follow \code{combn(n, 2)} (\code{s1 < s2}), the same order as
+#' \code{as.vector(dist())}. \code{sparse$edges} has \code{s1 < s2} too (as
+#' created by \code{sparse_diss()}); the result is in the order of the edges.
 #' @noRd
 subset_pairs <- function(Y_df, sparse, n, id = NULL, dist_method = NULL) {
   if (!inherits(sparse, "sparse_diss")) {
@@ -107,7 +113,16 @@ subset_pairs <- function(Y_df, sparse, n, id = NULL, dist_method = NULL) {
   Y_df[keep, , drop = FALSE]
 }
 
-#' Observed and modelled distances
+#' Observed dissimilarities and latent distances for all pairs (internal)
+#'
+#' Both vectors follow \code{combn(n, 2)}, the order of \code{as.vector(dist())}.
+#' For sparse fits the observed values are \code{object$obs_full} (all pairs);
+#' otherwise they are \code{Y_diss / Y_den} (all pairs were fitted).
+#'
+#' @param object A fitted \code{rrGDM} object.
+#' @param L_hat Matrix of latent coordinates (samples x dimensions).
+#' @return A list with \code{obs} (observed dissimilarities) and \code{dist}
+#'   (Euclidean distances between samples in the latent space).
 #' @noRd
 fit_pairs <- function(object, L_hat) {
   obs <- if (is.null(object$sparse) || is.null(object$obs_full)) {

@@ -51,7 +51,6 @@
 #'     should be interpreted with caution.
 #' }
 #'
-#'
 #' @return
 #' A list of class \code{wald_rrGDM} with two elements:
 #' \itemize{
@@ -65,16 +64,17 @@
 #'     \code{Estimate}, \code{SE}, \code{z}, \code{Pr_z}, \code{Sig}.
 #' }
 #'
+#' @seealso \code{\link{anova.rrGDM}} for tests by variable,
+#'   \code{\link{summary.rrGDM}}
+#'
 #' @export
 #' @importFrom stats pchisq pnorm
 wald_test <- function(object, include_intercept = FALSE) {
 
-  # rrGDM object
   if (!inherits(object, "rrGDM")) {
     cli::cli_abort("{.arg object} must be a fitted {.cls rrGDM} model.")
   }
 
-  # Has sd_rep
   if (is.null(object$sd_rep)) {
     cli::cli_abort(c(
       "x" = "{.arg object} has no {.field sd_rep}.",
@@ -85,7 +85,7 @@ wald_test <- function(object, include_intercept = FALSE) {
   check_pd_hessian(object)
 
   if (is.null(object$constraint)) {
-    cli::cli_abort("{.arg object} has no {.field constraint} recorded; try refitting the model with {.fn rrGDM}. Please report if the issue persist.")
+    cli::cli_abort("{.arg object} has no {.field constraint} recorded; try refitting the model with {.fn rrGDM}. Please report if the issue persists.")
   }
 
   constraint <- object$constraint
@@ -116,7 +116,7 @@ wald_test <- function(object, include_intercept = FALSE) {
       !isTRUE(all.equal(unname(lambda_hat), unname(report_lambda), tolerance = 1e-6))) {
     cli::cli_abort(c(
       "x" = "ADREPORT-derived {.field lambda} does not match {.code get_report(object)$lambda}.",
-      "i" = "If the problem persist, please report the issue."
+      "i" = "If the problem persists, please report the issue."
     ))
   }
 
@@ -134,7 +134,7 @@ wald_test <- function(object, include_intercept = FALSE) {
 
   singular_terms <- character(0)
 
-  # Wald (l)applied to each variable
+  # Wald test for each predictor
   lambda_res <- lapply(seq_len(n_env), function(i) {
     fd <- get_free_dims(i)
     zd <- setdiff(seq_len(k), fd)
@@ -175,7 +175,7 @@ wald_test <- function(object, include_intercept = FALSE) {
   if (length(singular_terms) > 0) {
     cli::cli_warn(c(
       "!" = "Covariance matrix was singular or ill-conditioned for term{?s}: {.val {singular_terms}}.",
-      "i" = "{.field Wald} and {.field Pr_Chisq} were set to {.val NA} for {cli::qty(length(singular_terms))}{?this/these} term{?s}.",
+      "i" = "{.field Wald} and {.field Pr_Chisq} were set to {.code NA} for {cli::qty(length(singular_terms))}{?this/these} term{?s}.",
       "i" = "This usually indicates unidentified or nearly collinear coefficients."
     ))
   }
@@ -248,7 +248,7 @@ wald_test <- function(object, include_intercept = FALSE) {
 #' Format p-values for printing (internal)
 #'
 #' Fixed notation for moderate/large values (3 decimals), scientific notation
-#' for small values (<0.001), and a floor of "<1e-6" for very small values.
+#' for small values (<0.001), and a floor of "<1e-06" for very small values.
 #' @param p Numeric vector of p-values.
 #' @param floor Values below this are printed as "<floor".
 #' @noRd
@@ -270,8 +270,9 @@ format_pval <- function(p, floor = 1e-6) {
 #' @param x An object of class \code{wald_rrGDM}, as returned by
 #'   \code{\link{wald_test}}.
 #' @param digits Number of significant digits for test statistics and
-#'   effect sizes. Default is 3.
+#'   effect sizes. Default is 4.
 #' @param ... Currently unused.
+#' @return Invisibly returns \code{x}.
 #' @export
 #' @method print wald_rrGDM
 print.wald_rrGDM <- function(x, digits = 4, ...) {
@@ -281,8 +282,9 @@ print.wald_rrGDM <- function(x, digits = 4, ...) {
   if (nrow(x$lambda) > 0) {
     d <- x$lambda
     d$Size <- fmt_num(d$Size)
-    d$Wald <- round(d$Wald,3)
+    d$Wald <- round(d$Wald, 3)
     d$Pr_Chisq <- format_pval(d$Pr_Chisq)
+    d$Sig[is.na(d$Sig)] <- " "   # NA is printed as blank
     print(d, row.names = FALSE, right = TRUE)
   } else {
     cli::cli_alert_info("No predictors to test.")
@@ -295,6 +297,7 @@ print.wald_rrGDM <- function(x, digits = 4, ...) {
     d$SE <- fmt_num(d$SE)
     d$z <- fmt_num(d$z)
     d$Pr_z <- format_pval(d$Pr_z)
+    d$Sig[is.na(d$Sig)] <- " "
     print(d, row.names = FALSE, right = TRUE)
   } else {
     cli::cli_alert_info("No dispersion terms.")
@@ -302,8 +305,7 @@ print.wald_rrGDM <- function(x, digits = 4, ...) {
 
   cat("\n---\n")
   cat("Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1\n")
-  cat("Wald tests on loadings can be \n")
-  cat("anti-conservative with few samples.\n")
+  cat("Wald tests on loadings can be anti-conservative with few samples.\n")
   invisible(x)
 }
 
@@ -411,7 +413,7 @@ anova.rrGDM <- function(object,
     cli::cli_abort("{.arg object} must be a fitted {.cls rrGDM} model.")
   }
 
-  if (length(list(...)) > 0) {
+  if (...length() > 0) {
     cli::cli_abort(c(
       "x" = "{.fn anova} for {.cls rrGDM} objects accepts a single model.",
       "i" = "Comparison of several models is not supported."
@@ -419,10 +421,10 @@ anova.rrGDM <- function(object,
   }
 
   if (!is.logical(interactions) || length(interactions) != 1 || is.na(interactions)) {
-    cli::cli_abort("{.arg interactions} must be a single {.val TRUE}/{.val FALSE} value.")
+    cli::cli_abort("{.arg interactions} must be a single {.code TRUE}/{.code FALSE} value.")
   }
   if (!is.logical(separate) || length(separate) != 1 || is.na(separate)) {
-    cli::cli_abort("{.arg separate} must be a single {.val TRUE}/{.val FALSE} value.")
+    cli::cli_abort("{.arg separate} must be a single {.code TRUE}/{.code FALSE} value.")
   }
 
   if (is.null(object$sd_rep)) {
@@ -442,13 +444,6 @@ anova.rrGDM <- function(object,
   k <- object$k
   sdr_vals <- object$sd_rep$value
   sdr_cov <- object$sd_rep$cov
-
-  if (is.null(sdr_cov)) {
-    cli::cli_abort(c(
-      "x" = "The standard-error report of {.arg object} has no covariance matrix.",
-      "i" = "Refit with {.code se = TRUE}, or run {.code include_se(object, getReportCovariance = TRUE)}."
-    ))
-  }
 
   X_design <- object$X_design
   W_design <- object$W_design
@@ -598,7 +593,7 @@ anova.rrGDM <- function(object,
   if (length(singular_rows) > 0) {
     cli::cli_warn(c(
       "!" = "Covariance matrix was singular or ill-conditioned for: {.val {singular_rows}}.",
-      "i" = "{.field Wald} and {.field Pr_Chisq} were set to {.val NA} for {cli::qty(length(singular_rows))}{?this/these} test{?s}.",
+      "i" = "{.field Wald} and {.field Pr_Chisq} were set to {.code NA} for {cli::qty(length(singular_rows))}{?this/these} test{?s}.",
       "i" = "This usually indicates unidentified or nearly collinear coefficients."
     ))
   }
@@ -697,12 +692,14 @@ wald_joint <- function(est, Sigma, rcond_tol = 1e-8) {
 }
 
 
-#' Stop if the Hessian at the optimum was not positive definite (internal)
+#' Stop if the standard errors cannot be used (internal)
 #'
-#' In that case \code{sdreport} returns NaN covariances: the model has not
-#' converged to a proper maximum or has unidentified parameters, so standard
-#' errors and Wald tests are not available.
-#' @param object A fitted \code{rrGDM} object.
+#' Stops if the Hessian at the optimum was not positive definite (\code{sdreport}
+#' then returns NaN covariances: the model has not converged to a proper maximum
+#' or has unidentified parameters), or if the covariance matrix of the reported
+#' quantities is missing (\code{sdreport} run with
+#' \code{getReportCovariance = FALSE} stores \code{NA} there).
+#' @param object A fitted \code{rrGDM} object with an \code{sd_rep}.
 #' @noRd
 check_pd_hessian <- function(object) {
   if (isFALSE(hess_ok(object))) {
@@ -710,6 +707,13 @@ check_pd_hessian <- function(object) {
       "x" = "The Hessian at the optimum is not positive definite (or is nearly singular), so standard errors and Wald tests are not available.",
       "i" = "This usually means the model has not converged or has unidentified parameters (e.g., empty or collinear predictor levels, or too many latent dimensions for the data).",
       "*" = "Try {.code n_starts > 1}, fewer latent dimensions or a simpler model."
+    ))
+  }
+  cov_rep <- object$sd_rep$cov
+  if (!is.matrix(cov_rep) || nrow(cov_rep) != length(object$sd_rep$value)) {
+    cli::cli_abort(c(
+      "x" = "The standard-error report of {.arg object} has no covariance matrix.",
+      "i" = "Refit with {.code se = TRUE}, or run {.fn include_se} on the fitted object without {.code getReportCovariance = FALSE}."
     ))
   }
   invisible(TRUE)
@@ -722,6 +726,7 @@ check_pd_hessian <- function(object) {
 #'   \code{\link{anova.rrGDM}}.
 #' @param digits Number of decimal places for the Wald statistics. Default is 3.
 #' @param ... Currently unused.
+#' @return Invisibly returns \code{x}.
 #' @export
 #' @method print anova_rrGDM
 print.anova_rrGDM <- function(x, digits = 3, ...) {
