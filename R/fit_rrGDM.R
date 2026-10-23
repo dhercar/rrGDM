@@ -276,7 +276,7 @@ rrGDM <- function(Y,
     parameters = parameters,
     DLL = 'rrGDM',
     random = c('u', 'u_sample'),
-    random.start = expression(last.par[random]),
+    random.start = expression(last.par.best[random]),
     silent = !trace,
     map = mapping)
 
@@ -337,12 +337,11 @@ rrGDM <- function(Y,
       obj$env$value.best <- Inf
       obj$fn(fit$par)  #inner modes at this optimum
       H <- tryCatch(stats::optimHess(fit$par, obj$fn, obj$gr), error = function(e) NULL)
-      if (!is.null(H) && all(is.finite(H)) &&
-          min(eigen(H, symmetric = TRUE, only.values = TRUE)$values) > 0) {
+      if (!is.null(H) && all(is.finite(H)) && hess_is_pd(H)) {
         ok_obj <- fit$objective
         ok_fit <- fit
-        ok_H   <- H
-        ok_re  <- if (length(re_idx) > 0) obj$env$last.par.best[re_idx] else numeric(0)
+        ok_H <- H
+        ok_re <- if (length(re_idx) > 0) obj$env$last.par.best[re_idx] else numeric(0)
       }
     }
 
@@ -363,9 +362,11 @@ rrGDM <- function(Y,
       if (ok_obj > best_obj + 1e-3) {
         cli::cli_alert_info("Reporting the best converged fit (objective {round(ok_obj, 2)}); a lower objective ({round(best_obj, 2)}) came from a fit that did not converge to a positive-definite optimum.")
       }
+
       best_fit <- ok_fit
       best_obj <- ok_obj
       base_re <- ok_re
+
     } else {
       cli::cli_warn("No start converged to a positive-definite optimum: estimates and standard errors are not reliable. Try more starts, a larger {.arg init_jitter}, or a different {.arg init_method}.")
     }
@@ -411,6 +412,7 @@ rrGDM <- function(Y,
     opt = best_fit,
     obj = obj,
     sd_rep = sd_rep,
+    pd_hess = compute_pd_hess(sd_rep),
     best_par = best_par,
     k = k,
     family = family,
@@ -446,6 +448,7 @@ rrGDM <- function(Y,
 include_se <- function(obj, ...) {
   sd_rep <- TMB::sdreport(obj$obj, getReportCovariance = TRUE, ...)
   obj$sd_rep <- sd_rep
+  obj$pd_hess <- compute_pd_hess(sd_rep)
   return(obj)
 }
 
@@ -540,7 +543,7 @@ print.rrGDM <- function(x, digits = 3, n_u = 5, ...) {
 
   pd_hess <- if (is.null(x$sd_rep)) {
     "not computed"
-  } else if (isTRUE(x$sd_rep$pdHess)) {
+  } else if (isTRUE(hess_ok(x))) {
     "yes"
   } else {
     "NO"

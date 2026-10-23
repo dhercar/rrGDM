@@ -64,16 +64,23 @@ summary.rrGDM <- function(object, ...) {
   })
 
   sd_rep <- object$sd_rep
-  has_se <- !is.null(sd_rep)
+  has_sd_rep <- !is.null(sd_rep)
+  pd_ok <- has_sd_rep && isTRUE(hess_ok(object))
+  has_se <- pd_ok   # no SEs / Wald tests if there is no sd_rep or the Hessian is not usable
   has_sample_re <- !is.null(report$u_sample)
 
   n_env <- ncol(object$X_design)
   if (is.null(n_env)) n_env <- 0L
 
-  if (!has_se) {
+  if (!has_sd_rep) {
     cli::cli_warn(c(
       "!" = "{.arg object} has no {.field sd_rep}: standard errors and Wald tests are not available.",
       "i" = "Refit the model with {.code se = TRUE}, or run {.fn include_se} on the fitted object."
+    ))
+  } else if (!pd_ok) {
+    cli::cli_warn(c(
+      "!" = "The Hessian at the optimum is not positive definite (or is nearly singular): standard errors and Wald tests are omitted.",
+      "i" = "Only point estimates are reported."
     ))
   }
 

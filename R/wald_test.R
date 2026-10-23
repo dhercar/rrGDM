@@ -82,7 +82,7 @@ wald_test <- function(object, include_intercept = FALSE) {
     ))
   }
 
-  check_pd_hessian(object$sd_rep)
+  check_pd_hessian(object)
 
   if (is.null(object$constraint)) {
     cli::cli_abort("{.arg object} has no {.field constraint} recorded; try refitting the model with {.fn rrGDM}. Please report if the issue persist.")
@@ -432,7 +432,7 @@ anova.rrGDM <- function(object,
     ))
   }
 
-  check_pd_hessian(object$sd_rep)
+  check_pd_hessian(object)
 
   if (is.null(object$constraint)) {
     cli::cli_abort("{.arg object} has no {.field constraint} recorded; try refitting the model with {.fn rrGDM}. Please report if the issue persists.")
@@ -702,12 +702,12 @@ wald_joint <- function(est, Sigma, rcond_tol = 1e-8) {
 #' In that case \code{sdreport} returns NaN covariances: the model has not
 #' converged to a proper maximum or has unidentified parameters, so standard
 #' errors and Wald tests are not available.
-#' @param sd_rep An \code{sdreport} object (or \code{NULL}).
+#' @param object A fitted \code{rrGDM} object.
 #' @noRd
-check_pd_hessian <- function(sd_rep) {
-  if (isFALSE(sd_rep$pdHess)) {
+check_pd_hessian <- function(object) {
+  if (isFALSE(hess_ok(object))) {
     cli::cli_abort(c(
-      "x" = "The Hessian at the optimum is not positive definite, so standard errors and Wald tests are not available.",
+      "x" = "The Hessian at the optimum is not positive definite (or is nearly singular), so standard errors and Wald tests are not available.",
       "i" = "This usually means the model has not converged or has unidentified parameters (e.g., empty or collinear predictor levels, or too many latent dimensions for the data).",
       "*" = "Try {.code n_starts > 1}, fewer latent dimensions or a simpler model."
     ))

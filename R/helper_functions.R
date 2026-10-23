@@ -117,3 +117,52 @@ fit_pairs <- function(object, L_hat) {
   }
   list(obs = obs, dist = as.vector(stats::dist(L_hat)))
 }
+
+
+#' Is a Hessian positive definite, with a tolerance? (internal)
+#'
+#' Checks the Hessian of the negative log-likelihood at an optimum (all
+#' eigenvalues should be positive). The Hessian is first rescaled to a
+#' correlation-type matrix, so the check does not depend on the units of the
+#' parameters.
+#'
+#' @param H Numeric Hessian matrix (of the negative log-likelihood).
+#' @param tol Smallest acceptable ratio between the smallest and the largest
+#'   eigenvalue of the rescaled Hessian.
+#' @return \code{TRUE} or \code{FALSE}.
+#' @noRd
+hess_is_pd <- function(H, tol = 1e-9) {
+  if (is.null(H) || any(!is.finite(H))) return(FALSE)
+  H <- (H + t(H)) / 2
+  d <- diag(H)
+  if (any(d <= 0)) return(FALSE)
+  ev <- eigen(H / sqrt(outer(d, d)), symmetric = TRUE, only.values = TRUE)$values
+  min(ev) > tol * max(ev)
+}
+
+#' Positive-definiteness flag from an sdreport object (internal)
+#'
+#' Combines TMB's own \code{pdHess} with \code{\link{hess_is_pd}} applied to the
+#' Hessian implied by \code{sd_rep$cov.fixed}.
+#'
+#' @param sd_rep An \code{sdreport} object (or \code{NULL}).
+#' @return \code{NA} if \code{sd_rep} is \code{NULL}, otherwise \code{TRUE}/\code{FALSE}.
+#' @noRd
+compute_pd_hess <- function(sd_rep) {
+  if (is.null(sd_rep)) return(NA)
+  isTRUE(sd_rep$pdHess) &&
+    isTRUE(tryCatch(hess_is_pd(solve(sd_rep$cov.fixed)), error = function(e) FALSE))
+}
+
+#' Is the Hessian of a fitted rrGDM usable? (internal)
+#'
+#' Uses the stored \code{pd_hess} flag; for models fitted before it existed,
+#' falls back to TMB's \code{pdHess}.
+#'
+#' @param object A fitted \code{rrGDM} object.
+#' @return \code{NA} if there is no \code{sd_rep}, otherwise \code{TRUE}/\code{FALSE}.
+#' @noRd
+hess_ok <- function(object) {
+  if (is.null(object$sd_rep)) return(NA)
+  if (!is.null(object$pd_hess)) object$pd_hess else isTRUE(object$sd_rep$pdHess)
+}
