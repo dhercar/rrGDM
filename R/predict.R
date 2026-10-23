@@ -6,12 +6,19 @@
 #' dissimilarities between sites. It supports parametric bootstrapping to assess
 #' parameter uncertainty and site-level dispersion.
 #'
+#' @details
+#' Simulations (\code{boot = TRUE}) use R's random number generator: call
+#' \code{set.seed()} beforehand for reproducible results.
+#'
 #' @param object An object of class \code{rrGDM}.
-#' @param X_new A data frame containing new environmental predictor values.
+#' @param newdata A data frame containing new environmental predictor values.
 #' If \code{NULL}, predictions are made for the original data used in model fitting.
 #' @param boot Logical. Should predictions account for parameter and site-level uncertainty via simulation? Defaults to \code{TRUE}.
+#' If \code{FALSE}, a single prediction is returned and \code{sample_param}, \code{sim_site},
+#' \code{n_sim} and \code{probs} are ignored.
 #' @param sample_param Logical. If \code{TRUE}, parameters (\code{lambda} and
-#' \code{beta}) are sampled from the variance-covariance matrix.
+#' \code{beta}) are sampled from the variance-covariance matrix. This requires standard
+#' errors (fit the model with \code{se = TRUE} or run \code{\link{include_se}}). Defaults to \code{TRUE}.
 #' @param n_sim Integer specifying the number of simulation draws. Defaults to 1000.
 #' @param sim_site Logical. Should site-level random variation
 #' be included in the predictions? Defaults to \code{TRUE}.
@@ -22,46 +29,67 @@
 #' in the latent space. Defaults to \code{"response"}.
 #' @param probs Numeric vector of probabilities for calculating quantiles from
 #' the simulated distribution. Defaults to \code{c(0.025, 0.5, 0.975)}.
-#' @param conditional Logical. If \code{TRUE}, returns predictions from the fitted (conditional) latent positions of the samples used to fit the model, including sample-level and random-effect deviations. Only available when \code{X_new = NULL}. Defaults to \code{FALSE}.
-#' @param ... not used
+#' @param conditional Logical. If \code{TRUE}, returns predictions from the fitted (conditional) latent positions of the samples used to fit the model, including sample-level and random-effect deviations. Only available when \code{newdata = NULL}. Sets \code{boot = FALSE}. Defaults to \code{FALSE}.
+#' @param ... Ignored.
 #'
 #' @return
-#' If \code{ordination = TRUE}, a \code{data.frame} of latent coordinates.
-#' If \code{ordination = FALSE}, a \code{data.frame} of pairwise dissimilarities, with columns for the requested quantiles.
+#' A \code{data.frame}.
+#' If \code{ordination = TRUE}: the latent coordinates (columns \code{L.1}, ..., \code{L.k}),
+#' the sample number (\code{sample}) and the columns of \code{newdata}. With
+#' \code{boot = TRUE} there is one row per sample and draw, and a column \code{draw}.
+#' If \code{ordination = FALSE}: one row per pair of rows of \code{newdata}, with the row
+#' numbers of the pair (\code{s1}, \code{s2}) and either the predicted dissimilarity
+#' (\code{dist}, if \code{boot = FALSE}) or one column per value of \code{probs}
+#' (named \code{"2.5\%"}, \code{"50\%"}, ..., if \code{boot = TRUE}).
 #'
 #' @method predict rrGDM
 #' @importFrom MASS mvrnorm
 #' @importFrom stats delete.response model.frame model.matrix quantile rnorm na.pass dist
 #' @importFrom utils combn
 #' @export
-#
 predict.rrGDM <- function(object,
-                          X_new = NULL,
+                          newdata = NULL,
                           boot = TRUE,
                           sample_param = TRUE,
                           n_sim = 1000,
                           sim_site = TRUE,
                           ordination = FALSE,
-                          type = 'response',
+                          type = c('response', 'link'),
                           probs = c(0.025, 0.5, 0.975),
                           conditional = FALSE,
                           ...) {
 
-  if (conditional == TRUE) boot <- FALSE
-
   # -------------------- BASIC CHECKS ---------------------------------
 
+  type <- match.arg(type)
+
+  flags <- list(boot = boot, sample_param = sample_param, sim_site = sim_site,
+                ordination = ordination, conditional = conditional)
+  for (nm in names(flags)) {
+    if (!(isTRUE(flags[[nm]]) || isFALSE(flags[[nm]]))) {
+      cli::cli_abort("{.arg {nm}} must be either {.code TRUE} or {.code FALSE}.")
+    }
+  }
+  if (!is.numeric(n_sim) || length(n_sim) != 1 || !is.finite(n_sim) || n_sim < 1 || n_sim != round(n_sim)) {
+    cli::cli_abort("{.arg n_sim} must be a single positive integer.")
+  }
+  if (!is.numeric(probs) || anyNA(probs) || any(probs < 0 | probs > 1)) {
+    cli::cli_abort("{.arg probs} must be numeric, with values between 0 and 1.")
+  }
+
+  if (conditional) boot <- FALSE
+
   # Conditional predictions only available for fitted data
-  if ((conditional == TRUE) && !is.null(X_new)) {
+  if (conditional && !is.null(newdata)) {
     cli::cli_abort(c(
       "x" = "{.arg conditional = TRUE} is currently only available for the samples used to fit the model.",
-      "*" = "Set {.arg X_new = NULL} to get conditional predictions for the fitted samples.",
+      "*" = "Set {.arg newdata = NULL} to get conditional predictions for the fitted samples.",
       "*" = "Or set {.arg conditional = FALSE} to predict for new data: use {.code sim_site = TRUE} to include population-level error, and {.code sample_param = TRUE} to also include parameter uncertainty."
     ))
   }
 
   # Warning about biased average dissimilarities
-  if ((sim_site == FALSE) & (ordination == FALSE) & (conditional == FALSE)) {
+  if ((!boot || !sim_site) && !ordination && !conditional) {
     cli::cli_inform(c(
       "i" = "Returning dissimilarities as distances between {.strong centroids}.",
       "!" = "Note: Distances between centroids are not equivalent to the expected (average) distances or dissimilarities between samples, which can be much larger.",
@@ -76,24 +104,24 @@ predict.rrGDM <- function(object,
     ))
   }
 
-  # Inverse link
   inv_link <- if (type == 'link') function(x) x else object$inv_link
 
   # --------------------------- PREP DATA --------------------------------------------
 
-  # If no new data data is provided, use data in model object
-  if (is.null(X_new)) {
-    X_new <- object$X
+  # If no new data is provided, use data in model object
+  if (is.null(newdata)) {
+    newdata <- object$X
     X_design <- object$X_design
     W_design <- object$W_design
+    if (is.null(newdata)) newdata <- data.frame(row.names = seq_len(nrow(W_design)))
 
   } else {
-    X_new <- as.data.frame(X_new)
+    newdata <- as.data.frame(newdata)
     tt_fix <- delete.response(object$terms_fix)
 
     mf_fix <- stats::model.frame(
       tt_fix,
-      data = X_new,
+      data = newdata,
       xlev = object$xlevels_fix,
       na.action = stats::na.pass)
 
@@ -117,7 +145,7 @@ predict.rrGDM <- function(object,
 
     mf_sd <- stats::model.frame(
       tt_sd,
-      data = X_new,
+      data = newdata,
       xlev = object$xlevels_sd,
       na.action = stats::na.pass)
 
@@ -125,48 +153,58 @@ predict.rrGDM <- function(object,
       tt_sd,
       data = mf_sd,
       contrasts.arg = object$contrasts_sd)
+
+    if (anyNA(X_design) || anyNA(W_design)) {
+      cli::cli_abort("{.arg newdata} has missing values in the variables used by the model.")
+    }
   }
 
-  if (is.null(X_new)) X_new <- data.frame(row.names = seq_len(nrow(W_design)))
   # --------------------------- GET COORDINATES --------------------------------------
 
-  if (!ordination && nrow(X_new) < 2) {
-    cli::cli_abort(c(
-      "x" = "Pairwise dissimilarity prediction requires at least 2 rows in {.arg X_new}.",
-      "i" = "Set {.arg ordination = TRUE} to predict latent coordinates for a single row."
-    ))
+  if (!ordination) {
+    if (nrow(newdata) < 2) {
+      cli::cli_abort(c(
+        "x" = "Pairwise dissimilarity prediction requires at least 2 rows in {.arg newdata}.",
+        "i" = "Set {.arg ordination = TRUE} to predict latent coordinates for a single row."
+      ))
+    }
+    # Pairs of rows, in the order of as.vector(dist())
+    comb <- t(utils::combn(nrow(newdata), 2))
+    colnames(comb) <- c('s1', 's2')
   }
 
-  if (boot) { # Return samples
+  if (boot) {
 
-    if (sample_param == TRUE) { # Parametric bootstrapping?
+    if (sample_param) { # Parametric bootstrapping?
       if (is.null(object$sd_rep)) {
         cli::cli_abort(c(
           "x" = "Parameter bootstrapping requires standard errors, but this model has no {.field sd_rep}.",
-          "i" = "Refit with {.code se = TRUE}, or set {.code sample_param = FALSE}."
+          "i" = "Refit with {.code se = TRUE}, run {.fn include_se} on the fitted object, or set {.code sample_param = FALSE}."
         ))
       }
+      check_pd_hessian(object)
 
       idx <- names(object$sd_rep$value) %in% c('lambda', 'beta')
       sim <- MASS::mvrnorm(n = n_sim, mu = object$sd_rep$value[idx], Sigma = object$sd_rep$cov[idx, idx]) # sample from vcov
+      if (is.null(dim(sim))) sim <- t(sim) # n_sim = 1 returns a vector
 
-      samples <- lapply(1:nrow(sim), function(x){ # Expected coordinates
+      samples <- lapply(seq_len(nrow(sim)), function(x){
         sim_i <- sim[x,]
         lambda <- matrix(sim_i[names(sim_i) == 'lambda'], ncol = object$k)
         beta <- sim_i[names(sim_i) == 'beta']
         tau <- exp(W_design %*% beta)
         L <- X_design %*% lambda
         if (sim_site)  { # Include site level error (dispersion)? otherwise param uncertainty only
-          L = L  + matrix(rnorm(nrow(X_design) * object$k, 0, rep(tau, object$k)), ncol = object$k)
+          L <- L + matrix(rnorm(nrow(X_design) * object$k, 0, rep(tau, object$k)), ncol = object$k)
         }
         data.frame(draw = x, L = L)
       })
 
-    } else if (sample_param == FALSE)  {
+    } else {
       rep_par <- get_report(object)
       L_base <- X_design %*% rep_par$lambda
       tau <- exp(W_design %*% rep_par$beta)
-      samples <- lapply(1:n_sim, function(x){
+      samples <- lapply(seq_len(n_sim), function(x){
         L <- L_base
         if (sim_site)  {
           L <- L + matrix(rnorm(nrow(X_design) * object$k, 0, rep(tau, object$k)), ncol = object$k)
@@ -175,43 +213,38 @@ predict.rrGDM <- function(object,
       })
     }
 
-    if (ordination == TRUE) {
+    if (ordination) {
       # Return coordinates directly (all samples)
-      samples <- lapply(samples, function(x) cbind(x, sample = 1:nrow(x), X_new))
+      samples <- lapply(samples, function(x) cbind(x, sample = seq_len(nrow(x)), newdata))
       samples <- do.call(rbind, samples)
       return(samples)
 
-    } else if (ordination == FALSE) {
+    } else {
       # Compute expected dissimilarities from coordinates
-      comb <- t(utils::combn(nrow(X_new), 2))
-      colnames(comb) <- c('s1', 's2')
-
       samples_dist <- lapply(samples, function(x){
-        dist_mat <- as.matrix(stats::dist(x[,-1]))
-        inv_link(dist_mat[comb])})
+        inv_link(as.vector(stats::dist(x[,-1])))})
 
       # Return dissimilarities (summarised into quantiles)
       samples_dist <- do.call(cbind, samples_dist)
-      samples_data <- t(apply(samples_dist, 1, function(x) quantile(x, probs = probs)))
-      return(cbind(comb, samples_data))
+      samples_data <- t(matrix(apply(samples_dist, 1, quantile, probs = probs), nrow = length(probs)))
+      colnames(samples_data) <- names(quantile(0, probs = probs))
+      return(data.frame(comb, samples_data, check.names = FALSE))
     }
 
   } else {
-    if (conditional == TRUE) {
-     L <- get_report(object)$L
-    } else if (conditional == FALSE) {
-     L <- X_design %*% get_report(object)$lambda
+    if (conditional) {
+      L <- get_report(object)$L
+    } else {
+      L <- X_design %*% get_report(object)$lambda
     }
-      if (ordination == TRUE) {
-        predict_ord <- data.frame(L = L, sample = 1:nrow(X_new), X_new)
-        return(predict_ord)
 
-      } else if (ordination == FALSE) {
-        comb <- t(utils::combn(nrow(X_new), 2))
-        colnames(comb) <- c('s1', 's2')
-        predict_dis <- data.frame(dist = inv_link(as.matrix(stats::dist(L))[comb]), comb)
-        return(predict_dis)
+    if (ordination) {
+      predict_ord <- data.frame(L = L, sample = seq_len(nrow(newdata)), newdata)
+      return(predict_ord)
+
+    } else {
+      predict_dis <- data.frame(comb, dist = inv_link(as.vector(stats::dist(L))))
+      return(predict_dis)
     }
   }
 }
-
