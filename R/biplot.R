@@ -11,14 +11,16 @@
 #'   plot. Default is \code{c(1, 2)}.
 #' @param rotate Logical indicating whether to apply varimax rotation
 #'   (via \code{\link[stats]{varimax}}) before plotting. Default is
-#'   \code{TRUE}. The result of varimax rotation is that ordination axes are ordered relative to their
-#'   associated importance.
+#'   \code{TRUE}. Varimax rotates the axes towards simple structure; it does
+#'   not order them by variance explained. As in \code{\link{get_LV}}, the
+#'   rotation is estimated from the conditional coordinates (\code{L}), whatever
+#'   the \code{type} plotted.
 #' @param type Character string: either \code{'conditional'} (site scores
 #'   including sample-level error, \code{L}) or \code{'marginal'} (site
 #'   scores as determined by environmental loadings only, \code{L_m}). Default is
 #'   \code{'conditional'}.
-#' @param col_by Optional character string naming a variable
-#'   used to colour points. Ignored if \code{add_points = FALSE}.
+#' @param col_by Optional character string naming a variable in
+#'   \code{x$X} used to colour points. Ignored if \code{add_points = FALSE}.
 #' @param shape_by Optional character string naming a variable in
 #'   \code{x$X} used to shape points. Ignored if \code{add_points = FALSE}.
 #' @param add_points Logical indicating whether to add the default sample
@@ -95,7 +97,7 @@
 biplot.rrGDM <- function(x,
                          k = c(1, 2),
                          rotate = TRUE,
-                         type = 'conditional',
+                         type = c('conditional', 'marginal'),
                          col_by = NULL,
                          shape_by = NULL,
                          add_points = TRUE,
@@ -138,15 +140,16 @@ biplot.rrGDM <- function(x,
   if (any(k < 1) || any(k > x$k)) {
     cli::cli_abort("{.arg k} must reference dimensions between 1 and {x$k} (the model's number of latent dimensions).")
   }
-  if (!is.logical(rotate) || length(rotate) != 1 || is.na(rotate)) {
-    cli::cli_abort("{.arg rotate} must be a single {.val TRUE}/{.val FALSE} value.")
+  flags <- list(rotate = rotate, env_load = env_load, species_cor = species_cor,
+                compare = compare, add_points = add_points)
+  for (nm in names(flags)) {
+    if (!(isTRUE(flags[[nm]]) || isFALSE(flags[[nm]]))) {
+      cli::cli_abort("{.arg {nm}} must be either {.code TRUE} or {.code FALSE}.")
+    }
   }
 
-  type <- match.arg(type, c('conditional', 'marginal'))
+  type <- match.arg(type)
 
-  if (!is.logical(env_load) || !is.logical(species_cor) || !is.logical(compare) || !is.logical(add_points)) {
-    cli::cli_abort("{.arg env_load}, {.arg species_cor}, {.arg compare} and {.arg add_points} must be logical.")
-  }
   if (!is.numeric(env_load_scale) || !is.numeric(sp_load_scale) || !is.numeric(text_size)) {
     cli::cli_abort("{.arg env_load_scale}, {.arg sp_load_scale} and {.arg text_size} must be numeric.")
   }
@@ -159,14 +162,14 @@ biplot.rrGDM <- function(x,
     if (!is.numeric(species_cor_n) || length(species_cor_n) != 1 ||
         is.na(species_cor_n) || species_cor_n != as.integer(species_cor_n) ||
         species_cor_n < 1) {
-      cli::cli_abort("{.arg species_cor_n} must be a single positive integer, or {.val NULL}.")
+      cli::cli_abort("{.arg species_cor_n} must be a single positive integer, or {.code NULL}.")
     }
     species_cor_n <- as.integer(species_cor_n)
   }
 
   if (compare && type != 'conditional') {
     cli::cli_abort(c(
-      "x" = "{.arg compare = TRUE} is only supported when {.code type = 'conditional'}.",
+      "x" = "{.code compare = TRUE} is only supported when {.code type = 'conditional'}.",
       "i" = "Set {.code type = 'conditional'} to overlay marginal scores on conditional scores."
     ))
   }
@@ -208,10 +211,9 @@ biplot.rrGDM <- function(x,
 
   rot <- diag(x$k)
 
-  #  Try to rotate
-  if (rotate) {
+  if (rotate) { # estimated from L (as in get_LV), also when plotting L_m
     rot <- tryCatch(
-      stats::varimax(points, normalize = FALSE)$rotmat,
+      stats::varimax(as.matrix(report$L), normalize = FALSE)$rotmat,
       error = function(e) {
         cli::cli_warn(c(
           "!" = "Varimax rotation failed; plotting unrotated scores instead.",
@@ -227,7 +229,6 @@ biplot.rrGDM <- function(x,
   points_rot <- data.frame(pts_mat, x$X, check.names = FALSE)
 
   # ----------------- BASE PLOT --------------------------
-  # Empty plot
   plot_obj <- ggplot2::ggplot(points_rot, ggplot2::aes(x = .data$LV.1, y = .data$LV.2)) +
     ggplot2::coord_equal() +
     ggplot2::xlab(paste0('LV', k[1])) +
@@ -248,7 +249,7 @@ biplot.rrGDM <- function(x,
         ggplot2::labs(color = col_by)
     } else if (has_shape) {
       plot_obj <- plot_obj +
-        ggplot2::geom_point(ggplot2::aes(shape = .data[[shape_by]])) +
+        ggplot2::geom_point(ggplot2::aes(shape = as.factor(.data[[shape_by]]))) +
         ggplot2::labs(shape = shape_by)
     } else {
       plot_obj <- plot_obj + ggplot2::geom_point()
@@ -300,6 +301,14 @@ biplot.rrGDM <- function(x,
     sp_names <- colnames(Y_com)
     if (is.null(sp_names)) sp_names <- paste0('sp', seq_len(ncol(Y_com)))
 
+    # Species that do not vary across samples have no correlation
+    varies <- apply(Y_com, 2, stats::sd) > 0
+    if (!all(varies)) {
+      cli::cli_inform("{sum(!varies)} species with no variation across samples {?is/are} not shown.")
+      Y_com <- Y_com[, varies, drop = FALSE]
+      sp_names <- sp_names[varies]
+    }
+
     sp_load <- cbind(
       LV.1 = as.numeric(stats::cor(Y_com, points_rot$LV.1, method = 'spearman')),
       LV.2 = as.numeric(stats::cor(Y_com, points_rot$LV.2, method = 'spearman'))
@@ -308,9 +317,9 @@ biplot.rrGDM <- function(x,
     sp_load_df <- data.frame(sp_load, sp = sp_names, check.names = FALSE)
 
     if (!is.null(species_cor_n) && nrow(sp_load_df) > species_cor_n) {
-      cli::cli_warn(c(
-        "!" = "Labelling only the {species_cor_n} species with the strongest correlation ({nrow(sp_load_df)} available).",
-        "i" = "Increase {.arg species_cor_n}, or set it to {.val NULL}, to label more."
+      cli::cli_inform(c(
+        "i" = "Labelling only the {species_cor_n} species with the strongest correlation ({nrow(sp_load_df)} available).",
+        "*" = "Increase {.arg species_cor_n}, or set it to {.code NULL}, to label more."
       ))
       strength <- sqrt(rowSums(sp_load^2))
       keep <- order(strength, decreasing = TRUE)[seq_len(species_cor_n)]
@@ -330,7 +339,7 @@ biplot.rrGDM <- function(x,
 
   if (compare) {
     if (is.null(report$L_m)) {
-      cli::cli_warn("{.arg compare = TRUE} The fitted model does not contain marginal scores; skipping comparison.")
+      cli::cli_warn("{.code compare = TRUE} but the fitted model does not contain marginal scores; skipping comparison.")
     } else {
       lm_mat <- (as.matrix(report$L_m) %*% rot)[, k, drop = FALSE]
       colnames(lm_mat) <- c('LV_m.1', 'LV_m.2')
