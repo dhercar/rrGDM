@@ -19,10 +19,13 @@ rrGDM(
   sample_error = TRUE,
   constraint = 1,
   trans = function(x) x,
+  sparse = NULL,
   seed = NULL,
-  init_jitter = 0.01,
+  init_jitter = 0.1,
   n_starts = 1,
+  previous_best = TRUE,
   init_method = "dbRDA",
+  start_fit = NULL,
   trace = FALSE,
   control = list()
 )
@@ -56,11 +59,18 @@ rrGDM(
 
 \item{trans}{Function used to transform the response matrix before computing dissimilarities (e.g., log, sqrt). Default is no transformation.}
 
+\item{sparse}{Optional object of class \code{sparse_diss} (see \code{\link{sparse_diss}}). If supplied, the model is fitted using only the pairs of samples listed in \code{sparse$edges}, instead of all pairs. It must be created from the same samples as \code{Y}. Default is NULL (all pairs).}
+
 \item{seed}{An integer specifying the seed for random number generation. Default is NULL.}
 
 \item{init_jitter}{Numeric. A small standard deviation used to jitter initial parameter values.}
 
-\item{init_method}{A character string specifying a method used to obtain initial values for optimisation. Currently, only \code{'PCOA'} and \code{'dbRDA'} available.}
+\item{previous_best}{Logical. Controls where the jitter for multiple starts after the first is applied
+If \code{TRUE} (default), each start jitters around the best solution found so far (perturb-and-reoptimise). If \code{FALSE}, every start jitters around the initial values (from \code{init_method}), so starts do not depend on earlier fits. Only relevant when \code{n_starts > 1}.}
+
+\item{init_method}{A character string specifying a method used to obtain initial values for optimisation. Currently, only \code{'PCOA'} and \code{'dbRDA'} available. Ignored if \code{start_fit} is supplied.}
+
+\item{start_fit}{Optional fitted \code{rrGDM} model used to initialise the optimisation (e.g., a fast sparse fit before refitting with more pairs). It must have the same samples, \code{k}, \code{family}, \code{link}, \code{constraint}, predictors and random-effect structure as the new model; the set of pairs (\code{sparse}) may differ. If supplied, \code{init_method} is ignored. Default is NULL.}
 
 \item{control}{A list of control parameters passed to stats::nlminb}
 }
