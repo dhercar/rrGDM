@@ -15,8 +15,11 @@ Default is 3.}
 
 \item{...}{Currently unused.}
 }
+\value{
+Invisibly returns \code{x}.
+}
 \description{
-Prints a compact overview of a \code{sparse_diss} object: the number of
+Prints an overview of a \code{sparse_diss} object: the number of
 samples and pairs (full and included), the selection settings, the pairs
 kept by type and the number of pairs per sample.
 }

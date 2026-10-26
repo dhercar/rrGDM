@@ -18,8 +18,11 @@ Default is 5.}
 
 \item{...}{Currently unused.}
 }
+\value{
+Invisibly returns \code{x}.
+}
 \description{
-Prints a compact overview of a fitted \code{rrGDM} object.
+Prints an overview of a fitted \code{rrGDM} object.
 }
 \details{
 Convergence information includes the convergence code returned by
