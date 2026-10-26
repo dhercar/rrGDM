@@ -1,7 +1,7 @@
 ---
 output: github_document
-editor_options: 
-  markdown: 
+editor_options:
+  markdown:
     wrap: 72
 ---
 
@@ -31,13 +31,13 @@ distances. This means that RRGDM can provide, in one model:
 
 -   an **ordination** of samples and predictor loadings in a latent
     space, representing composition state (like PCoA/RDA)
-    
+
 -   estimates of which **environmental predictors** drive compositional
     turnover (like GDM), including support for categorical predictors
     and random effects (e.g., `... + (1 | group)`)
-  
+
 -   a way to separately model effects on **average composition** versus
-    **compositional dispersion** , here estimated jointly in the same
+    **compositional dispersion**, here estimated jointly in the same
     latent space (see below).
 
 ## Installation
@@ -68,15 +68,21 @@ $$
 \xi_{il} = \mathbf{x}_{i} \boldsymbol{\lambda}_{l} + u_{il}, \qquad u_{il} \sim N(0,\ \tau_i^2)
 $$
 
-$\mathbf{x}_i$ contains predictor values for sample $i$, passed through `formula`. Like in other modelling packages, factors are dummy-coded, and terms passed with the syntax `(1|group)` are treated as random effects. $\boldsymbol{\lambda}_l$ is the loading describing how
+$\mathbf{x}_i$ contains predictor values for sample $i$, passed through
+`formula`. Like in other modelling packages, factors are dummy-coded,
+and terms passed with the syntax `(1|group)` are treated as random
+effects. $\boldsymbol{\lambda}_l$ is the loading describing how
 strongly, and in which direction, each predictor influences position of
 samples along dimension $l$. $u_{il}$ is a sample-level random effect
-capturing whatever **structured** variability (i.e., variability constrained in the k latent variables) isn't explained by predictors.
+capturing whatever **structured** variability (i.e., variability
+constrained in the k latent variables) isn't explained by predictors.
 
-The spread of samples (dispersion) is controlled by the parameter $\tau_i$, which can in turn be modelled as a function of external predictors via `formula_sd` :
+The spread of samples (dispersion) is controlled by the parameter
+$\tau_i$, which can in turn be modelled as a function of external
+predictors via `formula_sd`:
 
 $$
-\log(\tau_i) = \beta_0 + \mathbf{w}_i \boldsymbol{\beta}
+\log(\tau_i) = \kappa_0 + \mathbf{w}_i \boldsymbol{\kappa}
 $$
 
 So `formula` controls **where** samples are expected to sit in
@@ -118,9 +124,9 @@ env$pH_s <- scale(env$pH)
 
 We fit a model with a continuous predictor (`pH_s`), a categorical
 predictor (`Region`), and a random intercept for `Site`, all entering
-the latent composition via `formula`. We also let dispersion depend on pH via
-`formula_sd`, to test whether communities become more or less variable
-at different points along the pH gradient.
+the latent composition via `formula`. We also let dispersion depend on
+pH via `formula_sd`, to test whether communities become more or less
+variable with pH.
 
 ```{r, message=FALSE, warning=FALSE, results='hide'}
 m1 <- rrGDM(Y = com,
@@ -128,7 +134,7 @@ m1 <- rrGDM(Y = com,
             k = 2,  # 2 latent dimensions
             formula = ~ pH_s + as.factor(Region) + (1|Site),
             formula_sd = ~ pH_s,
-            family = 'beta.binomial', 
+            family = 'beta.binomial',
             link = 'negexp',
             dist_method = 'bray')
 ```
@@ -145,6 +151,35 @@ m1 <- rrGDM(Y = com,
     steps in latent distance correspond to equal *proportional* loss of
     shared species (ToDo: Ref paper).
 
+### Testing the effects of the predictors
+
+`anova()` gives Wald tests for each predictor of the fitted model. Each
+row tests all the parameters of a variable at once (`Df` is the number of
+parameters tested), which is useful for factors with several levels
+or for variables that appear in both `formula` and `formula_sd`.
+
+By default, the location (`formula`) and dispersion (`formula_sd`)
+effects of the same variable are tested **jointly**. This answers the
+question *does this variable matter at all?*
+
+```{r}
+anova(m1)
+```
+
+With `separate = TRUE`, location and dispersion effects are tested in
+separate rows. This answers two different questions: *does the variable
+shift community composition?* (location) and *does it change how
+variable communities are around that position?* (dispersion).
+
+```{r}
+anova(m1, separate = TRUE)
+```
+
+Wald tests on loadings can be anti-conservative with few samples, so
+treat p-values close to the threshold with caution. `wald_test()` gives
+the tests for each individual coefficient, and `summary()` the full
+model summary.
+
 ### Checking model fit
 
 `predict()` can return either **conditional** predictions (using each
@@ -155,82 +190,85 @@ diagnostic:
 
 -   Conditional fit shows how well latent community composition (as
     represented by the k latent dimensions) represents the true
-    variability in community composition. If the fit is poor, any inference should be 
-    done with caution. 
+    variability in community composition. If the fit is poor, any
+    inference should be done with caution.
 
 -   The gap between conditional and marginal fit shows how much of the
     variability in community composition is attributable to measured
     predictors versus unexplained sample-to-sample variability.
 
-```{r}
+```{r, message=FALSE}
 par(mfrow = c(1, 2))
-pred_Y <- predict(m1, conditional = TRUE)[, 1]
+pred_Y <- predict(m1, conditional = TRUE)[, 3]
 R2_cor <-  round(cor(pred_Y, m1$Y_diss / m1$Y_den)^2,2)
 plot(pred_Y, m1$Y_diss / m1$Y_den,
-     ylab = 'observed', xlab = 'predicted', main = paste0('conditional, Pseudo-R2: ', R2_cor))
+     ylab = 'observed', xlab = 'predicted',
+     main = paste0('conditional, Pseudo-R2: ', R2_cor))
 abline(0, 1)
 
+# median of the simulated marginal dissimilarities (column "50%")
 pred_Y <- predict(m1, conditional = FALSE)[, 4]
 R2_cor <-  round(cor(pred_Y, m1$Y_diss / m1$Y_den)^2,2)
 plot(pred_Y, m1$Y_diss / m1$Y_den,
-     ylab = 'observed', xlab = 'predicted', main = paste0('conditional, Pseudo-R2: ', R2_cor))
+     ylab = 'observed', xlab = 'predicted',
+     main = paste0('marginal, Pseudo-R2: ', R2_cor))
 abline(0, 1)
 par(mfrow = c(1,1))
 ```
 
 ### Ordination (biplot)
 
-Environmental loadings and sample positions can be represented in the same
-latent space, so it is possible to obtain a standard ordination plot with
-environmental arrows overlaid:
+Environmental loadings and sample positions can be represented in the
+same latent space, so it is possible to obtain a standard ordination
+plot with environmental arrows overlaid:
 
 ```{r}
-biplot(m1, rotate = FALSE, 
+biplot(m1, rotate = FALSE,
        col_by = 'pH_s',
        shape_by = 'Region') +
   scale_colour_viridis_c()
 ```
 
 As with any ordination, it is worth checking how much the reduced
-$k$-dimensional space distorts the original dissimilarities. The conditional fit above already
-gives us an idea, but `stress()` provides another, commonly used diagnostic. It
-returns a Kruskal-style stress statistic (similar to vegan::metaMDS and
-MASS::isoMDS) comparing fitted latent distances against the observed
-dissimilarities:
+$k$-dimensional space distorts the original dissimilarities. The
+conditional fit above already gives us an idea, but `stress()` provides
+another, commonly used diagnostic. It returns a Kruskal-style stress
+statistic (similar to vegan::metaMDS and MASS::isoMDS) comparing fitted
+latent distances against the observed dissimilarities:
 
 ```{r}
-stress(m1)
+stress(m1) # for the rank-transformed version
+stress(m1, type = 'metric', scale = 'response') # for the metric version
 ```
-
 
 ### Visualising partial effects in ordination space
 
 Because location and dispersion are both modelled directly in latent
 space, we can visualise the *partial* effect of predictors as an
-ordination. As an example, we represent latent coordinates for three
+ordination. For example, we represent latent coordinates for three
 representative pH values, specifying:
 
 -   `sim_site = TRUE`: so site-level random variability is included via
-    simulation from $N(0, \tau^2)$:
+    simulation from $N(0, \tau^2)$
 -   `sample_param = FALSE`: parameter uncertainty is not included
 
-```{r,warning=FALSE}
+```{r, warning=FALSE, message=FALSE}
 # Creating new data
 X_pred <- expand.grid(
   Region = as.factor(unique(gllvm::microbialdata$Xenv$Region)[1]),
   Site = as.factor('Aus'),
   pH_s = c(-1.5, 0, 1.5))
 
-# Generating preedictions
+# Generating predictions
 pred_ord_2 <- predict(m1,
-                       X_new = X_pred,
-                       ordination = TRUE,
-                       boot = TRUE,
-                       sample_param = FALSE, 
-                       sim_site = TRUE,   
-                       n_sim = 1000)
+                      newdata = X_pred,
+                      ordination = TRUE,
+                      boot = TRUE,
+                      sample_param = FALSE,
+                      sim_site = TRUE,
+                      n_sim = 1000)
 
-# Generating preedictions
+# Plotting predicted coordinates
 ggplot(pred_ord_2, aes(x = L.1, y = L.2)) +
   geom_hline(yintercept = 0, colour = 'grey') +
   geom_vline(xintercept = 0, colour = 'grey') +
@@ -248,10 +286,8 @@ ggplot(pred_ord_2, aes(x = L.1, y = L.2)) +
   ylab('LV 2')
 ```
 
-The centroids shows how expected community composition shifts
+The centroids show how expected community composition shifts
 *directionally* across the pH gradient (the effect of
 $\boldsymbol{\Lambda}$), while the size of each ellipse shows how
 community dispersion itself changes with pH. Both effects are estimated
 jointly and are readable directly off the same ordination.
-
-
