@@ -11,14 +11,14 @@ Authors@R: c(
     )
   )
 Language: en-GB
-Description: Tools for fitting and interrogating Reduced-Rank Generalised Dissimilarity Models (RRGDM). RRGDM extends
-    classic Generalised Dissimilarity Models by embedding sites in a low-dimensional
-    latent space via 'TMB' (Template Model Builder). Environmental predictors, random
-    effects, and effects on dispersion can all be specified directly on the latent
-    positions rather than on pairwise distances, unifying ordination and
-    dissimilarity regression within a single framework. Includes
-    tools for model fitting, prediction, inference on environmental loadings and
-    dispersion effects, goodness-of-fit assessment, and visualisation of model-based ordination.
+Description: Fits reduced-rank generalised dissimilarity models (rrGDM), in which
+    the dissimilarity between sites is described by their distance in a
+    low-dimensional latent space. Site positions can depend on environmental
+    predictors and random effects, and the dispersion of sites around their
+    expected positions can be modelled too. This gives model-based ordination
+    and dissimilarity regression in a single framework. Models are fitted by
+    maximum likelihood with the Laplace approximation, using 'TMB' (Template
+    Model Builder).
 License: GPL (>= 2)
 Encoding: UTF-8
 LazyData: true
