@@ -65,7 +65,6 @@
 #' One sample has one pair fewer if both the number of samples and
 #' \code{knn + n_random} are odd. A warning is given if some samples fall short
 #' or if the pairs do not connect all samples (increase \code{n_random}).
-#'
 #' @seealso \code{\link{plot.sparse_diss}}, \code{\link{print.sparse_diss}}
 #'
 #' @export
@@ -343,7 +342,7 @@ graph_components <- function(n, s1, s2) {
 #' Print method for sparse_diss objects
 #'
 #' @description
-#' Prints a compact overview of a \code{sparse_diss} object: the number of
+#' Prints an overview of a \code{sparse_diss} object: the number of
 #' samples and pairs (full and included), the selection settings, the pairs
 #' kept by type and the number of pairs per sample.
 #'
@@ -352,7 +351,7 @@ graph_components <- function(n, s1, s2) {
 #' @param digits Number of significant digits used to print dissimilarities.
 #'   Default is 3.
 #' @param ... Currently unused.
-#'
+#' @return Invisibly returns \code{x}.
 #' @method print sparse_diss
 #' @export
 print.sparse_diss <- function(x, digits = 3, ...) {

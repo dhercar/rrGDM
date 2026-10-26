@@ -458,7 +458,7 @@ rrGDM <- function(Y,
       }
     }
 
-    if (trace) cli::cli_alert_info("Start {i}/{n_starts}: objective = {signif(fit$objective, 8)}{if (is_best && i > 1) ' (new best)' else ''}")
+   cli::cli_alert_info("Start {i}/{n_starts}: objective = {signif(fit$objective, 8)}{if (is_best && i > 1) ' (new best)' else ''}")
   }
 
   cli::cli_process_done()
@@ -590,7 +590,7 @@ include_se <- function(object, ...) {
 #' Print method for rrGDM models
 #'
 #' @description
-#' Prints a compact overview of a fitted \code{rrGDM} object.
+#' Prints an overview of a fitted \code{rrGDM} object.
 #'
 #' @param x A fitted model of class \code{rrGDM}.
 #' @param digits Number of significant digits used to print loadings. Default is 3.
@@ -607,7 +607,7 @@ include_se <- function(object, ...) {
 #' errors were requested) and the largest absolute gradient of the fixed
 #' parameters. Loadings are printed as estimated (i.e., unrotated). Use
 #' \code{\link{get_LV}} to extract the full matrices.
-#'
+#' @return Invisibly returns \code{x}.
 #' @method print rrGDM
 #' @export
 print.rrGDM <- function(x, digits = 3, n_u = 5, ...) {
