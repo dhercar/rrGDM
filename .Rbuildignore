@@ -8,3 +8,6 @@ src/*.so
 ^cran-comments\.md$
 ^\.github$
 ^data-raw$
+^_pkgdown\.yml$
+^docs$
+^pkgdown$

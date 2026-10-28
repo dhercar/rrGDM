@@ -37,7 +37,7 @@ Imports:
 LinkingTo: 
   TMB,
   RcppEigen
-URL: https://github.com/dhercar/rrGDM
+URL: https://github.com/dhercar/rrGDM, https://dhercar.github.io/rrGDM/
 BugReports: https://github.com/dhercar/rrGDM/issues
 Suggests: 
     ggplot2 (>= 3.4.0),
