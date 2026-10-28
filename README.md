@@ -27,8 +27,7 @@ distances. This means that RRGDM can provide, in one model:
 
 ## Installation
 
-You can install the development version of rrGDM from
-[GitHub](https://github.com/) with:
+You can install the development version of rrGDM from GitHub with:
 
 ``` r
 # install.packages("devtools")
