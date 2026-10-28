@@ -7,6 +7,9 @@ editor_options:
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
+# rrGDM <img src="man/figures/logo.svg" align="right" height="139" alt="" />
+
+
 ```{r, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
@@ -16,7 +19,6 @@ knitr::opts_chunk$set(
 )
 ```
 
-# rrGDM
 
 <!-- badges: start -->
 
